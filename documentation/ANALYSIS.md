@@ -696,6 +696,8 @@ def simulate(*args, **kwargs):
     * **Exit Handlers:** It registers cleanup functions using Python's `atexit` module. **`stats.dump`** is registered to ensure statistics are written when the process exits, and **`_m5.core.doExitCleanup`** handles final C++ cleanup.
     * **Stats Reset:** **`stats.reset()`** is called to put the statistics into a clean starting state *after* the initial values were collected during instantiation.
 
+  [➡️ Technical Deep-Dive: gem5 Event Scheduling](gem5-event-scheduling-details.md)
+
 ### 2\. Checkpoint Resume Logic
 
 ```python
