@@ -4,16 +4,16 @@ from m5.objects import *
 # 1. Create the System
 system = System()
 system.clk_domain = SrcClockDomain()
-system.clk_domain.clock = '1GHz'
+system.clk_domain.clock = "1GHz"
 system.clk_domain.voltage_domain = VoltageDomain()
 
 # 2. Memory Mode (Timing is fine, or Atomic for speed)
-system.mem_mode = 'timing'
-system.mem_ranges = [AddrRange('512MB')]
+system.mem_mode = "timing"
+system.mem_ranges = [AddrRange("512MB")]
 
 # 3. Create CPU
 # Note: Changing this to X86TimingSimpleCPU if using build/X86
-system.cpu = RiscvTimingSimpleCPU() 
+system.cpu = RiscvTimingSimpleCPU()
 
 # 4. Create Bus
 system.membus = SystemXBar()
@@ -30,7 +30,7 @@ system.mem_ctrl.dram.range = system.mem_ranges[0]
 system.mem_ctrl.port = system.membus.mem_side_ports
 
 # 7. Workload
-binary = 'workloads/testing/hello'
+binary = "workloads/testing/hello"
 system.workload = SEWorkload.init_compatible(binary)
 
 process = Process()
