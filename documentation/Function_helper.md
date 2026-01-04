@@ -130,11 +130,11 @@ This functions works via inheritance from `PacketQueue`. The `schedSendTiming` m
 ```cpp
 void PacketQueue::schedSendTiming(PacketPtr pkt, Tick when) {
     // ... sanity checks ...
-    
+
     // Insert packet into transmitList based on timestamp
     // ... (insertion logic) ...
     transmitList.emplace_front(when, pkt);
-    
+
     // Schedule the physical send event
     schedSendEvent(when);
 }

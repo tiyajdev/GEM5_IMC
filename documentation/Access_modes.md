@@ -9,9 +9,9 @@ The gem5 simulator defines three memory access modes, each offering a specific b
 ### A. ⏱️ Timing Mode – The Realistic Model
 Timing mode provides the most detailed and accurate simulation of hardware behavior.
 
-* **Time Advancement:** Accesses advance simulator time (Tick) through events scheduled in the event queue.  
-* **Latency:** Each component (cache, bus, memory controller) adds its own latency.  
-* **Interleaving:** Requests can overlap, accurately modeling pipeline and contention effects.  
+* **Time Advancement:** Accesses advance simulator time (Tick) through events scheduled in the event queue.
+* **Latency:** Each component (cache, bus, memory controller) adds its own latency.
+* **Interleaving:** Requests can overlap, accurately modeling pipeline and contention effects.
 * **Use Case:** Detailed performance analysis, measuring IPC and execution time for architectural studies.
 
 ***
@@ -19,9 +19,9 @@ Timing mode provides the most detailed and accurate simulation of hardware behav
 ### B. ⚛️ Atomic Mode – The Fast Model
 Atomic mode sacrifices timing detail to achieve much higher execution speed.
 
-* **Time Advancement:** Simulator time does not advance during access. Instead, the total latency is returned to the requester, which later updates time.  
-* **Atomicity:** Memory operations are performed as atomic C++ call chains with no interleaving.  
-* **Speed vs. Accuracy:** Faster than Timing mode because it avoids event scheduling, but less accurate since contention and parallelism are not modeled.  
+* **Time Advancement:** Simulator time does not advance during access. Instead, the total latency is returned to the requester, which later updates time.
+* **Atomicity:** Memory operations are performed as atomic C++ call chains with no interleaving.
+* **Speed vs. Accuracy:** Faster than Timing mode because it avoids event scheduling, but less accurate since contention and parallelism are not modeled.
 * **Use Case:** Fast-forwarding through non-critical simulation regions (e.g., OS boot or cache warm-up).
 
 ***
@@ -29,11 +29,11 @@ Atomic mode sacrifices timing detail to achieve much higher execution speed.
 ### C. ⚙️ Functional Mode – The Utility Model
 Functional mode ignores timing entirely, focusing only on correct data transfer.
 
-* **Time Advancement:** No time advancement; memory is updated instantly.  
-* **Mechanism:** Direct function calls read or write to memory.  
-* **Interleaving:** None; all operations occur sequentially.  
-* **Use Case:**  
-  - Initialization (loading binaries or restoring checkpoints).  
+* **Time Advancement:** No time advancement; memory is updated instantly.
+* **Mechanism:** Direct function calls read or write to memory.
+* **Interleaving:** None; all operations occur sequentially.
+* **Use Case:**
+  - Initialization (loading binaries or restoring checkpoints).
   - Debugging and inspection (examining or editing memory contents).
 
 ***
@@ -57,8 +57,8 @@ The differences between these access modes depend primarily on **interleaving** 
 ### A. Interleaving – The Core of Timing Mode
 Interleaving is the ability to process multiple memory requests simultaneously.
 
-* **In real systems:** CPUs can issue multiple concurrent requests; caches and buses handle these overlapping transactions.  
-* **In gem5 Timing Mode:** The simulator tracks the progress and state of every request through all hierarchy levels.  
+* **In real systems:** CPUs can issue multiple concurrent requests; caches and buses handle these overlapping transactions.
+* **In gem5 Timing Mode:** The simulator tracks the progress and state of every request through all hierarchy levels.
   This detailed modeling of contention and overlap increases realism but slows execution.
 
 ***
@@ -66,9 +66,9 @@ Interleaving is the ability to process multiple memory requests simultaneously.
 ### B. Simulator Time Advancement – The Basis of Speed
 Simulator time is measured in **Ticks** and advances through event execution.
 
-* **Event-Driven Execution:** In gem5, time advances only when an event completes (e.g., a cache lookup finishing at Tick 100).  
-* **Mode Differences:**  
-  - **Timing Mode:** Schedules numerous fine-grained events that each advance time.  
+* **Event-Driven Execution:** In gem5, time advances only when an event completes (e.g., a cache lookup finishing at Tick 100).
+* **Mode Differences:**
+  - **Timing Mode:** Schedules numerous fine-grained events that each advance time.
   - **Atomic/Functional Modes:** Perform a full access within one function call; time is advanced only after the call returns (or not at all).
 
 ***
@@ -80,7 +80,7 @@ Speed differences derive from how much event scheduling and interleaving logic g
 ***
 
 ### A. Timing Mode – Slowest but Most Accurate
-* Requires numerous scheduled events per transaction (L1 lookup, bus transfer, etc.).  
+* Requires numerous scheduled events per transaction (L1 lookup, bus transfer, etc.).
 * The event queue and request interleaving introduce high simulator overhead, reducing speed.
 
 ***
@@ -88,11 +88,11 @@ Speed differences derive from how much event scheduling and interleaving logic g
 ### B. Atomic Mode – Faster but Less Accurate
 Atomic mode replaces thousands of discrete events with one synchronous function call chain.
 
-* **Mechanism:**  
+* **Mechanism:**
   - The process begins when a component calls `RequestPort::sendAtomic(pkt)`, defined in src/mem/port.hh.
   - This function then calls `AtomicRequestProtocol::send(_responsePort, pkt)`, defines in src/mem/protocol/atomic.cc
-  - The request then propagates immediately through `peer->recvAtomic(pkt)`, where `peer` refers to the `_responsePort` connected to the `RequestPort` that initiated the transaction.  
-  - Each intermediate component adds its own latency and forwards the packet along the memory hierarchy.  
+  - The request then propagates immediately through `peer->recvAtomic(pkt)`, where `peer` refers to the `_responsePort` connected to the `RequestPort` that initiated the transaction.
+  - Each intermediate component adds its own latency and forwards the packet along the memory hierarchy.
     ```c
     Tick
     InspectorGadget::recvAtomic(PacketPtr pkt)
@@ -100,8 +100,8 @@ Atomic mode replaces thousands of discrete events with one synchronous function 
         return clockPeriod() + memSidePort.sendAtomic(pkt);
     }
     ```
-  - The final memory object processes the request and returns total latency.  
-* **Effect:** The entire memory path executes within one C++ stack frame. Fast to simulate, but no concurrency.  
+  - The final memory object processes the request and returns total latency.
+* **Effect:** The entire memory path executes within one C++ stack frame. Fast to simulate, but no concurrency.
 * **Result:** Produces valid per-access latency but inaccurate overall performance metrics.
 
 ***
@@ -109,13 +109,13 @@ Atomic mode replaces thousands of discrete events with one synchronous function 
 #### The Core Limitation – No Interleaving
 
 ##### i. Ignoring Contention and Resource Conflicts
-* **Real System (Timing):** Simulates multiple cores contending for shared structures (e.g., the L2 cache).  
-* **Atomic Mode:** Serializes access; one request blocks the system until completion.  
+* **Real System (Timing):** Simulates multiple cores contending for shared structures (e.g., the L2 cache).
+* **Atomic Mode:** Serializes access; one request blocks the system until completion.
 * **Result:** System appears faster than it would under realistic contention.
 
 ##### ii. Ignoring Memory-Level Parallelism (MLP)
-* **Real System:** Allows multiple outstanding memory requests in flight, overlapping long DRAM latencies.  
-* **Atomic Mode:** Processes requests one at a time, eliminating these overlaps.  
+* **Real System:** Allows multiple outstanding memory requests in flight, overlapping long DRAM latencies.
+* **Atomic Mode:** Processes requests one at a time, eliminating these overlaps.
 
 | Mode | Benefit (Efficiency) | Limitation (Accuracy) |
 |:------|:---------------------|:----------------------|
@@ -127,9 +127,9 @@ Atomic mode replaces thousands of discrete events with one synchronous function 
 ***
 
 ### C. Functional Mode – Fastest, Data-Only
-* Functions like a memory copy (`memcpy`), ignoring timing and events.  
-* No latency calculation, no interleaving, no time progression.  
-* Used only for initialization, state restoration, or inspection.  
+* Functions like a memory copy (`memcpy`), ignoring timing and events.
+* No latency calculation, no interleaving, no time progression.
+* Used only for initialization, state restoration, or inspection.
 
 ***
 

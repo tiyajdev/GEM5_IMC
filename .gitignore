@@ -36,3 +36,8 @@ configs/dram/lowp_sweep.cfg
 .vscode
 typings
 .DS_Store
+configs/learning_gem5/core_example/
+src/bootcamp/
+workloads/imc_test
+workloads/test_imc
+workloads/testing/
