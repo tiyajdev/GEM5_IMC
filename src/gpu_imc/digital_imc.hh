@@ -1,20 +1,8 @@
-/**
- * @file digital_imc.hh
- * @brief Header file for the DigitalIMC gem5 model.
- *
- * This device models a Digital In-Memory Computing (DIMC) unit based on the architecture
- * described in Sun et al., "Analog or Digital In-memory Computing Benchmarking through
- * Quantitative Modeling" (2023).
- *
- * It implements a bit-serial Matrix-Vector Multiplication (MVM) engine attached to the
- * system bus via PIO (control) and DMA (data movement).
- */
-
 #ifndef __GPU_IMC_DIGITAL_IMC_HH__
 #define __GPU_IMC_DIGITAL_IMC_HH__
 
-#include <vector>            // Required for std::vector storage buffers
-#include "dev/dma_device.hh" // Required for the base DmaDevice class
+#include <vector>            //<--- CHANGED: Added vector include
+#include "dev/dma_device.hh" // <--- CHANGED: Must include dma_device.hh
 #include "params/DigitalIMC.hh"
 
 namespace gem5
@@ -24,85 +12,45 @@ namespace gem5
     {
     private:
         // --- PIO Interface (MMIO) ---
-        // Address range and latency for CPU register accesses
         const Addr pioAddr;
         const Addr pioSize;
         const Tick pioDelay;
 
-        // --- Registers Map (Offsets) ---
-        // These offsets align with the software driver
-        static const int REG_CMD = 0x00;         // 1=Compute, 2=LoadW, 3=LoadIn, 4=StoreOut
-        static const int REG_STATUS = 0x04;      // 0=Idle, 1=Busy
-        static const int REG_INPUT_PREC = 0x08;  // Configurable Input Precision (1-8 bits)
-        static const int REG_WEIGHT_PREC = 0x0C; // Configurable Weight Precision (1-8 bits)
+        // --- Control & Compute Registers (0x00 - 0x0F) ---
+        static const int REG_CMD = 0x00;    // 1: Start Compute, 2: Start DMA
+        static const int REG_STATUS = 0x04; // Read 0=Idle, 1=Busy
+        static const int REG_PREC = 0x08;   // Runtime Precision (1, 2, 4, 8 bits)
 
-        // Dedicated DMA Registers
-        // Weights (Set once per layer)
-        static const int REG_WGT_ADDR = 0x10;
-        static const int REG_WGT_LEN = 0x18;
+        // --- DMA Configuration Registers (0x10 - 0x1F) ---
+        static const int REG_SRC_ADDR = 0x10; // DRAM Address (Pointer to Weights)
+        static const int REG_LEN = 0x18;      // Length of data in Bytes to copy
 
-        // Inputs (Set every batch)
-        static const int REG_IN_ADDR = 0x20;
-        static const int REG_IN_LEN = 0x28;
-
-        // Outputs (Set every batch)
-        static const int REG_OUT_ADDR = 0x30;
-        // Note: Output Length is auto-calculated from BatchSize * NumCols
-
-        static const int REG_BATCH = 0x38; // Number of vectors to process in this command
-
-        // --- Register Storage Struct ---
-        // Holds the actual values written by the CPU
+        // --- Register Storage ---
         struct Registers
         {
             uint32_t cmd;
             uint32_t status;
-            uint32_t inputPrec;
-            uint32_t weightPrec;
-
-            // DMA State Variables
-            uint64_t wgtAddr;
-            uint32_t wgtLen;
-            uint64_t inAddr;
-            uint32_t inLen;
-            uint64_t outAddr;
-
-            uint32_t batchSize;
+            uint32_t prec;
+            uint64_t srcAddr; // 64-bit Address!
+            uint32_t len;
         } regs;
 
-        // --- Fixed Hardware Parameters (From Python Config) ---
-        int numRows;       // Array Height (Parallelism Di)
-        int numCols;       // Array Width (Parallelism Do)
-        int maxWeightPrec; // Physical limit of weight cells (Bw)
+        // --- Fixed Hardware Parameters (From Python) ---
+        int numRows;      // Di (e.g., 32 or 128)
+        int numCols;      // Do (e.g., 6)
+        int numBanks;     // Parallel banks
+        int maxPrecision; // Physical constraint (e.g., 8-bit)
 
-        // --- Input/Output Buffer Geometry ---
-        int maxInputPrec;    // Physical limit of input columns per input
-        int maxInputsPerRow; // Physical limit of inputs packed in one row (Buffer Depth)
+        // --- Internal State & DMA Buffers ---
+        std::vector<uint8_t> weight_array; // Buffer to store weights loaded from DRAM
 
-        // Calculated Parameters
-        int inputRowSize;      // Bytes per Input Row (Derived from precision constraints)
-        int outputBufferDepth; // Max number of output vectors the buffer can hold
-
-        // --- Internal State & Buffers (The "Scratchpads") ---
-        std::vector<uint8_t> weight_array;   // Stores Weights (Linearized 2D array)
-        std::vector<uint8_t> input_buffer;   // 256KB-equivalent Input SRAM
-        std::vector<uint64_t> output_buffer; // Output Accumulator/Register Buffer
-
-        // --- Helpers ---
-        // Helper to extract weight from linear array using (Row, Col)
-        uint8_t getWeight(int row, int col) const
-        {
-            int index = (row * numCols) + col;
-            if (index < 0 || index >= weight_array.size())
-                return 0;
-            return weight_array[index];
-        }
-
-        // --- Events (for Timing Simulation) ---
+        // --- Events ---
+        // 1. Event for when Compute finishes (Timing Model)
         EventFunctionWrapper computeDoneEvent;
         void startCompute();
         void computeDone();
 
+        // 2. Event for when DMA finishes (Data Movement)
         EventFunctionWrapper dmaDoneEvent;
         void startDma();
         void dmaDone();
@@ -114,13 +62,8 @@ namespace gem5
         DigitalIMC(const Params &p);
 
         // --- Pure Virtual Functions (CPU Interaction) ---
-        // Defines the memory range this device occupies
         AddrRangeList getAddrRanges() const override;
-
-        // Handles CPU Reads to Registers
         Tick read(PacketPtr pkt) override;
-
-        // Handles CPU Writes to Registers
         Tick write(PacketPtr pkt) override;
     };
 
