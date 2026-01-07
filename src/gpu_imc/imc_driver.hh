@@ -22,7 +22,8 @@ namespace gem5
         int open(ThreadContext *tc, int mode, int flags) override;
 
         /**
-         * IO Control (Unused).
+         * IO Control.
+         * HANDLES ADDRESS TRANSLATION (Virtual -> Physical).
          */
         int ioctl(ThreadContext *tc, unsigned req, Addr buf) override;
 

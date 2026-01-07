@@ -6,13 +6,19 @@
 #include "sim/process.hh"
 // 4. Required to create 'DeviceFDEntry'
 #include "sim/fd_entry.hh"
-#include "sim/mem_state.hh"  // Required for extendMmap
-#include "mem/page_table.hh" // Required for pTable->map
-// 5. Optional: Required if you use DPRINTF
-// #include "base/trace.hh"
+#include "sim/mem_state.hh"                 // Required for extendMmap
+#include "mem/page_table.hh"                // Required for pTable->map
+#include "mem/se_translating_port_proxy.hh" // Required for reading user memory
+#include "debug/DigitalIMC.hh"
 
 namespace gem5
 {
+    // Define the data structure we share with the User App
+    struct imc_ioctl_args
+    {
+        uint64_t va_addr; // Input: Virtual Address
+        uint64_t pa_addr; // Output: Physical Address
+    };
 
     // Constructor
     IMCDriver::IMCDriver(const Params &p)
@@ -41,32 +47,62 @@ namespace gem5
     int
     IMCDriver::ioctl(ThreadContext *tc, unsigned req, Addr buf)
     {
+        // Helper to safely read/write the User's memory
+        SETranslatingPortProxy se_proxy(tc);
+
+        // COMMAND 0xCAFE: VIRTUAL TO PHYSICAL TRANSLATION
+        if (req == 0xCAFE)
+        {
+            imc_ioctl_args args;
+
+            // 1. Read the struct from User Memory (User passed a pointer 'buf')
+            se_proxy.readBlob(buf, &args, sizeof(args));
+
+            DPRINTF(DigitalIMC, "Driver: Request to translate VA 0x%lx\n", args.va_addr);
+
+            // 2. Perform the Translation
+            Addr physical_addr = 0;
+            auto process = tc->getProcessPtr();
+
+            if (process->pTable->translate(args.va_addr, physical_addr))
+            {
+                // Success! Write the result into the struct
+                args.pa_addr = (uint64_t)physical_addr;
+                DPRINTF(DigitalIMC, "Driver: Success! VA 0x%lx -> PA 0x%lx\n", args.va_addr, args.pa_addr);
+            }
+            else
+            {
+                // Failure
+                DPRINTF(DigitalIMC, "Driver: Translation Failed for VA 0x%lx\n", args.va_addr);
+                return -1;
+            }
+
+            // 3. Write the struct BACK to User Memory
+            se_proxy.writeBlob(buf, &args, sizeof(args));
+
+            return 0; // Return 0 for Success (Standard Linux convention)
+        }
+
         return 0;
     }
 
     // 3. MMAP: The Bridge to Hardware
-    Addr
-    IMCDriver::mmap(ThreadContext *tc, Addr start, uint64_t length,
-                    int prot, int tgtFlags, int tgtFd, off_t offset)
+    Addr IMCDriver::mmap(ThreadContext *tc, Addr start, uint64_t length,
+                         int prot, int tgtFlags, int tgtFd, off_t offset)
     {
-        // 1. Ask the System to find a free Virtual Address (The Table Number)
         auto process = tc->getProcessPtr();
         auto mem_state = process->memState;
+
+        // 1. Allocate Virtual Address Space
+        // This asks the OS (Gem5) for a chunk of free virtual memory.
         start = mem_state->extendMmap(length);
 
-        // 2. CONNECT PAGE 1: The Registers
-        //    Map Virtual "start" -> Physical 0x80000000
-        process->pTable->map(start, 0x80000000, 4096,
+        // 2. Map Virtual Pointer -> Physical Register Base
+        // CRITICAL: This physical address (0x80000000) MUST match the 'pio_addr'
+        // you define in your Python run script (run_imc.py).
+        // If they differ, the CPU writes will miss the device!
+        process->pTable->map(start, 0x80000000, length,
                              EmulationPageTable::Uncacheable);
-
-        // 3. CONNECT PAGE 2: The Data Buffer
-        //    Map Virtual "start + 4096" -> Physical 0x88000000
-        //    We only do this if the user asked for enough space.
-        if (length > 4096)
-        {
-            process->pTable->map(start + 4096, 0x10000000, 4096,
-                                 EmulationPageTable::Uncacheable);
-        }
 
         return start;
     }

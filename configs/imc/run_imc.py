@@ -14,7 +14,7 @@ system.mem_ranges = [AddrRange('512MB')] # RAM: 0x00000000 -> 0x20000000
 # -------------------------------------------------------------------------
 # 2. CPU & Bus
 # -------------------------------------------------------------------------
-system.cpu = RiscvTimingSimpleCPU()
+system.cpu = TimingSimpleCPU()
 system.membus = SystemXBar()
 
 # Connect CPU ports
@@ -36,10 +36,15 @@ system.mem_ctrl.port = system.membus.mem_side_ports
 # -------------------------------------------------------------------------
 # CRITICAL: pio_addr must match the address in 'imc_driver.hh' (0x80000000)
 system.imc = DigitalIMC(
-    pio_addr=0x80000000,
+pio_addr=0x80000000,
     pio_latency='10ns',
     num_rows=32,
-    num_cols=6
+    num_cols=6,
+    num_banks=1,
+    max_precision_w=4,    # Hardware fixed at 4-bit weights
+    max_precision_i=8,    # Hardware fixed at 8-bit inputs
+    input_buffer_size='4KiB',
+    output_buffer_size='4KiB'
 )
 
 # Connect IMC to Bus
