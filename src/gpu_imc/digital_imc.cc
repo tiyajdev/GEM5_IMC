@@ -45,6 +45,7 @@ namespace gem5
         regs.prec_w = maxPrecW; // Default to max
         regs.prec_i = maxPrecI; // Default to max
         regs.out_addr = 0;
+        regs.sign = 0;           // Default to unsigned
         current_sram_offset = 0; // Initialize internal pointer
 
         // 2. Configure "Hard" Core (Workspace)
@@ -118,6 +119,9 @@ namespace gem5
         case REG_OUT_ADDR:
             data = regs.out_addr;
             break;
+        case REG_SIGN:
+            data = regs.sign;
+            break;
         default:
             data = 0;
             break;
@@ -189,7 +193,12 @@ namespace gem5
             regs.prec_w = std::min((uint32_t)data, (uint32_t)maxPrecW);
             DPRINTF(DigitalIMC, "Config: Weight Precision set to %d bits\n", regs.prec_w);
             break;
-
+        case REG_SIGN:
+            // Bit 0: 0 = Unsigned, 1 = Signed
+            regs.sign = (uint32_t)data;
+            DPRINTF(DigitalIMC, "Config: Math Mode set to %s\n",
+                    (regs.sign & 1) ? "SIGNED" : "UNSIGNED");
+            break;
         default:
             break;
         }
@@ -231,6 +240,17 @@ namespace gem5
         return value;
     }
 
+    int32_t DigitalIMC::extendSign(uint32_t val, int bits)
+    {
+        // If the Most Significant Bit of the precision is 1, it's negative
+        if (val & (1 << (bits - 1)))
+        {
+            // Create a mask for the upper bits and set them to 1
+            return (int32_t)(val | (~((1 << bits) - 1)));
+        }
+        // Otherwise it's positive, just return as is
+        return (int32_t)val;
+    }
     // --- 1. COMPUTE LOGIC (System-Level + Bit-Serial Proof) ---
 
     void DigitalIMC::startCompute()
@@ -288,28 +308,35 @@ namespace gem5
             // Safety: Don't read past SRAM end
             if ((i_bit_offset / 8) >= input_sram.size())
                 break;
-            uint32_t input_val = readPackedBits(input_sram, i_bit_offset, regs.prec_i);
+            // 1. Read raw bits
+            uint32_t raw_i = readPackedBits(input_sram, i_bit_offset, regs.prec_i);
 
-            // LOOP 2: COLUMNS (Iterate weights)s
+            // 2. SIGN EXTEND INPUT: Convert from e.g. 4-bit signed to 32-bit signed
+            int32_t input_val = (regs.sign & 1) ? extendSign(raw_i, regs.prec_i) : (int32_t)raw_i;
+
+            // LOOP 2: COLUMNS (Iterate weights)
             for (int c = 0; c < numCols; c++)
             {
                 // 1. Read the full weight value ONCE
                 uint64_t w_index = r * numCols + c;
                 uint64_t w_bit_offset = w_index * regs.prec_w;
-                uint32_t weight_val = readPackedBits(weight_memory, w_bit_offset, regs.prec_w);
+                // 3. Read raw bits
+                uint32_t raw_w = readPackedBits(weight_memory, w_bit_offset, regs.prec_w);
 
+                // 4. SIGN EXTEND WEIGHT: Convert from e.g. 8-bit signed to 32-bit signed
+                int32_t weight_val = (regs.sign & 1) ? extendSign(raw_w, regs.prec_w) : (int32_t)raw_w;
                 // 2. Perform the Math directly (Integer MAC)
                 // Since we already paid the latency penalty in 'startCompute',
                 // we can cheat and do the math instantly here.
                 // (input * weight) is mathematically identical to the bit-serial sum.
-                internal_accumulators[c] += (uint64_t)input_val * weight_val;
+                internal_accumulators[c] += (int64_t)input_val * weight_val;
             }
         }
 
         // --- D. UPDATE STATS ---
         uint64_t ops_this_batch = (uint64_t)numRows * numCols;
         stats.numMacOps += ops_this_batch;
-        stats.numTotalBitOps += ops_this_batch * regs.prec_i * regs.prec_w;
+        stats.numTotalBitOps += ops_this_batch * regs.prec_i * maxPrecW;
         stats.numSramReads += numRows; // Broadcast 1 input row -> 6 cols
         stats.numSramWrites += numCols;
 
@@ -319,7 +346,7 @@ namespace gem5
 
         // 1. Calculate Theoretical Max Width (Sun et al.)
         //    Example: 8-bit In + 8-bit W + 32 Rows (5 bits) = 21 bits
-        double theoretical_bits = regs.prec_i + regs.prec_w + std::ceil(std::log2(numRows));
+        double theoretical_bits = maxPrecI + maxPrecW + std::ceil(std::log2(numRows));
 
         // 2. Round Up to Nearest Power of 2 (Hardware Alignment)
         //    If bits=21 -> next pow2 is 32.

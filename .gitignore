@@ -38,6 +38,7 @@ typings
 .DS_Store
 configs/learning_gem5/core_example/
 src/bootcamp/
-workloads/imc_test
-workloads/test_imc
-workloads/testing/
+# Ignore all bin folders anywhere in workloads
+workloads/*/bin/
+# Ignore generated MNIST headers
+workloads/mnist/*.h

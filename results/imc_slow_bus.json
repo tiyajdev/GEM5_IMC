@@ -1,0 +1,15 @@
+{
+    "Time (s)": "0.658589",
+    "Instructions": "6767284",
+    "CPU Busy Cycles": "658589358.999000",
+    "CPI": "97.311200",
+    "IPC": "0.010276",
+    "Syscalls (Driver Overhead)": "579",
+    "Hardware MAC Ops": "53568",
+    "IMC DMA Read (Bytes)": "62496",
+    "IMC DMA Written (Bytes)": "6696",
+    "Total DRAM Read (Bytes)": "677469056",
+    "Total DRAM Written (Bytes)": "45056",
+    "DRAM Bus Util (%)": "8.04",
+    "DRAM Energy (pJ)": "463291034085"
+}

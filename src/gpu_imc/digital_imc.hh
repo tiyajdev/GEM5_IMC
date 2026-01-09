@@ -67,6 +67,7 @@ namespace gem5
         static const int REG_I_ADDR = 0x20;   // Source/Dest Address for Input/Output DMA
         static const int REG_I_LEN = 0x28;    // Length for Input DMA
         static const int REG_OUT_ADDR = 0x30; // Destination Offset in Output SRAM
+        static const int REG_SIGN = 0x34;     // sign or unsigned Register
 
         // --- Register State Storage ---
         struct Registers
@@ -82,6 +83,7 @@ namespace gem5
             uint64_t i_addr;
             uint32_t i_len;
             uint64_t out_addr;
+            uint32_t sign;
         } regs;
 
         // --- Fixed Hardware Geometry (From Python) ---
@@ -112,6 +114,7 @@ namespace gem5
         // Helper: Read Packed Bits
         // Extracts 'len' bits from a byte vector at arbitrary bit_offset.
         uint32_t readPackedBits(const std::vector<uint8_t> &buf, uint64_t bit_offset, int len);
+        int32_t extendSign(uint32_t val, int bits);
 
         // Compute Engine (Events)
         EventFunctionWrapper computeDoneEvent;
