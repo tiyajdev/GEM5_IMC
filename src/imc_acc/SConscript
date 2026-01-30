@@ -1,0 +1,13 @@
+Import('*')
+
+# 1. Register the Python SimObject Definitions
+SimObject('IMCAccelerator.py', sim_objects=['IMCAccelerator'])
+SimObject('DigitalIMCCore.py', sim_objects=['DigitalIMCCore'])
+
+# 2. Register the C++ Source Files
+Source('imc_accelerator.cc')
+Source('digital_imc_core.cc')
+
+# 3. Register the Debug Flag
+# This allows you to use --debug-flags=IMCAccelerator in your run script
+DebugFlag('IMCAccelerator')
