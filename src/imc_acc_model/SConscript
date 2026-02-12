@@ -1,0 +1,21 @@
+Import('*')
+
+# 1. Register SimObjects (Python Definitions)
+SimObject('DigitalIMCCore.py', sim_objects=['DigitalIMCCore'])
+SimObject('IMCTester.py', sim_objects=['IMCTester'])
+SimObject('IMC_DMA_Engine.py', sim_objects=['IMC_DMA_Engine']) 
+# Uncomment the next line when you add the Wrapper later
+# SimObject('IMCAccelerator.py', sim_objects=['IMCAccelerator'])
+
+# 2. Register Source Files (C++ Implementation)
+Source('digital_imc_core.cc')
+Source('IMCTester.cc')
+Source('IMC_DMA_Engine.cc')
+# Uncomment the next line when you add the Wrapper later
+# Source('imc_accelerator.cc')
+
+# 3. Register Debug Flags (For DPRINTF)
+DebugFlag('DigitalIMCCore')
+DebugFlag('IMCTester')
+DebugFlag('IMCAcc')
+# DebugFlag('IMCAccelerator')
