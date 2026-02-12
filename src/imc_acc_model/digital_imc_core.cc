@@ -1,6 +1,7 @@
 #include "imc_acc_model/digital_imc_core.hh"
 #include <cmath>
 #include "base/trace.hh"
+#include "debug/IMCAcc.hh"
 #include "sim/core.hh"
 
 namespace gem5
@@ -74,6 +75,9 @@ namespace gem5
 
     void DigitalIMCCore::setWeights(const std::vector<uint8_t> &in, int bankID, int activeCols)
     {
+        DPRINTF(IMCAcc, "setWeights: Bank=%d, ActiveCols=%d, Bytes=%d\n",
+                bankID, activeCols, in.size());
+
         if (bankID >= numWeightBanks)
             panic("Invalid Bank ID!");
 
@@ -147,6 +151,8 @@ namespace gem5
 
     void DigitalIMCCore::setInputs(const std::vector<uint8_t> &in)
     {
+
+        DPRINTF(IMCAcc, "setInputs: Bytes=%d, PackedMode=%d\n", in.size(), (Bi == 4));
         // 1. Safety Clear: Wipe old data to prevent "ghost" signals
         clearInputBuffer();
 
@@ -242,6 +248,9 @@ namespace gem5
         // --- THIS IS YOUR EXACT LOGIC PORTED ---
         if (inputBuffer.empty() || weightBuffer.empty())
             return;
+
+        DPRINTF(IMCAcc, "Compute Start: ActiveRows=%d, ActiveCols=%d, Bank=%d\n",
+                regActiveRows, regActiveCols, currentComputeBank);
 
         // ---------------------------------------------------------
         // 1. HARDWARE RESET (The Fix)

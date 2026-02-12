@@ -15,7 +15,5 @@ Source('IMC_DMA_Engine.cc')
 # Source('imc_accelerator.cc')
 
 # 3. Register Debug Flags (For DPRINTF)
-DebugFlag('DigitalIMCCore')
-DebugFlag('IMCTester')
 DebugFlag('IMCAcc')
 # DebugFlag('IMCAccelerator')

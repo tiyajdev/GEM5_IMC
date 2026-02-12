@@ -81,7 +81,7 @@ namespace gem5
 
         uint8_t val = 2; // 2*2 = 4
         core->setInputs(generateData(rows, val));
-        core->setWeights(generateData(rows * cols, val), 0);
+        core->setWeights(generateData(rows * cols, val), 0, cols);
         core->execute();
 
         if (verifyOutput(0, cols, val * val * rows))
@@ -101,7 +101,7 @@ namespace gem5
 
         // Note: We assume Bi=4 and Bw=4 for this test mode
         core->setInputs(generateData(rows / 2, packed));
-        core->setWeights(generateData((rows * cols) / 2, packed), 0);
+        core->setWeights(generateData((rows * cols) / 2, packed), 0, cols);
         core->execute();
 
         if (verifyOutput(0, cols, val * val * rows))
@@ -127,7 +127,6 @@ namespace gem5
 
         std::cout << "  -> Active Region: " << activeRows << "x" << activeCols << std::endl;
 
-        core->resetAccumulators();
         core->setActiveDimensions(activeCols, activeRows);
 
         uint8_t val = 2;
@@ -181,13 +180,13 @@ namespace gem5
             }
 
             core->setInputs(packedInputs);
-            core->setWeights(packedWeights, 0);
+            core->setWeights(packedWeights, 0, activeCols);
         }
         else
         {
             // Unpacked Mode (Mode 2)
             core->setInputs(inputVec);
-            core->setWeights(weightVec, 0);
+            core->setWeights(weightVec, 0, activeCols);
         }
 
         // 5. Execute

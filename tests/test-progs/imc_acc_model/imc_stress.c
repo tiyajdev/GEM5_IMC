@@ -85,27 +85,27 @@ int main() {
     // ---------------------------------------------------------
     // 5. VERIFICATION
     // ---------------------------------------------------------
-    // printf(" > Verifying Results...\n");
-    // int errors = 0;
+    printf(" > Verifying Results...\n");
+    int errors = 0;
     
-    // for (int i = 0; i < LOOPS; i++) {
-    //     int expected_val = ((i % 255) + 1) * INPUT_LEN; // val * 144 * 1
+    for (int i = 0; i < LOOPS; i++) {
+        int expected_val = ((i % 255) + 1) * INPUT_LEN; // val * 144 * 1
         
-    //     // Check the first filter of this batch (since all filters are 1, they are identical)
-    //     int32_t actual_val = outputs[i * FILTERS]; 
+        // Check the first filter of this batch (since all filters are 1, they are identical)
+        int32_t actual_val = outputs[i * FILTERS]; 
         
-    //     if (actual_val != expected_val) {
-    //         printf("   [Error] Loop %d: Expected %d, Got %d\n", i, expected_val, actual_val);
-    //         errors++;
-    //         if (errors > 10) { printf("   ... Stopping verification (too many errors)\n"); break; }
-    //     }
-    // }
+        if (actual_val != expected_val) {
+            printf("   [Error] Loop %d: Expected %d, Got %d\n", i, expected_val, actual_val);
+            errors++;
+            if (errors > 10) { printf("   ... Stopping verification (too many errors)\n"); break; }
+        }
+    }
 
-    // if (errors == 0) {
-    //     printf("--- SUCCESS: All %d loops verified correctly! ---\n", LOOPS);
-    // } else {
-    //     printf("--- FAILED: Found %d errors ---\n", errors);
-    // }
+    if (errors == 0) {
+        printf("--- SUCCESS: All %d loops verified correctly! ---\n", LOOPS);
+    } else {
+        printf("--- FAILED: Found %d errors ---\n", errors);
+    }
 
     return 0;
 }

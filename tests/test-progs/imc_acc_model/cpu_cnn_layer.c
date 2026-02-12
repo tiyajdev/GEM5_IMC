@@ -7,17 +7,17 @@
 // 1. LAYER CONFIGURATION (Must match IMC exactly)
 // ---------------------------------------------------------
 // Input: 7x7x2
-#define IN_H 7
-#define IN_W 7
-#define IN_C 2
+#define IN_H 14
+#define IN_W 14
+#define IN_C 16
 
 // Filter: 3x3, 32 Filters
 #define K_H  3
 #define K_W  3
-#define NUM_FILTERS 32
+#define NUM_FILTERS 64
 
 // Hyperparameters
-#define STRIDE  2
+#define STRIDE  1
 #define PADDING 1
 
 // Flattened Kernel Length (for Weight Indexing)
