@@ -21,7 +21,6 @@ class DigitalIMCCore(ClockedObject):
     # --- 3. Logic Configuration ---
     input_signed = Param.Bool(False, "True if Input is Signed (Int8/4), False if Unsigned")
     weight_signed = Param.Bool(True, "True if Weight is Signed")
-    mask = Param.UInt32(0xF, "Bitmask for the inputs (e.g., 0xF for 4-bit)")
 
     # --- 4. Power Model ---
     energy_per_mac_fj = Param.Float(100.0, "Dynamic Energy per MAC operation (Femtojoules)")

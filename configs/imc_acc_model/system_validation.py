@@ -7,7 +7,7 @@ import os, sys
 # 1. SETUP SYSTEM & CLOCK
 # -------------------------------------------------------------------------
 system = System()
-system.clk_domain = SrcClockDomain(clock='1GHz', voltage_domain=VoltageDomain())
+system.clk_domain = SrcClockDomain(clock='0.5GHz', voltage_domain=VoltageDomain())
 system.mem_mode = 'timing' # Mandatory for latency measurement
 system.mem_ranges = [AddrRange('512MB')]
 
@@ -30,7 +30,7 @@ system.cpu.dcache_port = system.membus.cpu_side_ports
 # -------------------------------------------------------------------------
 # NEW (Safe - Above 512MB) no conflict with DRAM
 system.imc = IMC_DMA_Engine()
-system.imc_clk_domain = SrcClockDomain(clock='1.49GHz', voltage_domain=VoltageDomain())
+system.imc_clk_domain = SrcClockDomain(clock='0.36GHz', voltage_domain=VoltageDomain())
 
 system.imc.clk_domain = system.imc_clk_domain
 system.imc.pio_addr = 0x30000000
@@ -59,12 +59,21 @@ system.imc.dma = system.membus.cpu_side_ports
 # -------------------------------------------------------------------------
 system.cpu.createInterruptController()
 
-system.mem_ctrl = MemCtrl()
-system.mem_ctrl.dram = DDR3_1600_8x8()
-system.mem_ctrl.dram.range = system.mem_ranges[0]
-system.mem_ctrl.port = system.membus.mem_side_ports
+# system.mem_ctrl = MemCtrl()
+# system.mem_ctrl.dram = DDR3_1600_8x8()
+# system.mem_ctrl.dram.range = system.mem_ranges[0]
+# system.mem_ctrl.port = system.membus.mem_side_ports
 
 
+system.sram = SimpleMemory(
+    range=system.mem_ranges[0], 
+    latency='1ns'
+)
+
+# Connect directly to the memory bus
+system.sram.port = system.membus.mem_side_ports
+
+# Note: system.system_port is for the 'functional' access (loading binaries)
 system.system_port = system.membus.cpu_side_ports
 
 # -------------------------------------------------------------------------

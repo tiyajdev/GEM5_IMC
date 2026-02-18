@@ -7,7 +7,7 @@
 #include "mem/packet.hh"
 #include "mem/packet_access.hh"
 #include "sim/system.hh"
-#include "debug/IMCAcc.hh" // Optional: For DPRINTF if you enabled the flag
+#include "debug/IMCAcc.hh"
 
 namespace gem5
 {
@@ -46,7 +46,7 @@ namespace gem5
     AddrRangeList
     IMC_DMA_Engine::getAddrRanges() const
     {
-        // Report our address range to the system (256 bytes)
+        // Report the address range to the system (256 bytes)
         return {RangeSize(pioAddr, 0x100)};
     }
 
@@ -134,23 +134,19 @@ namespace gem5
         if (lastCommand == 1)
         {
             // --- WEIGHT LOADING MODE ---
-            // Pass the bankID to the Core!
-            core->setWeights(dataVec, bankID, activeCols); // <--- FIXED
+            // Pass the bankID to the Core
+            core->setWeights(dataVec, bankID, activeCols);
             busy = false;
         }
         else if (lastCommand == 2)
         {
             // --- COMPUTE MODE ---
             // Tell Core which bank to use for calculation
-            core->setComputeBank(bankID); // <--- FIXED
+            core->setComputeBank(bankID);
 
             core->setInputs(dataVec);
 
-            // ---------------------------------------------------------
-            // 2. CRITICAL FIX: SET DIMENSIONS FOR GATING
-            // ---------------------------------------------------------
-            // activeCols: Set by REG 0x38 (default 16)
-            // activeRows: Derived from REG 0x18 (transferSize)
+            // Set active dimensions for gating
             core->setActiveDimensions(activeCols, (int)transferSize);
 
             core->execute();
@@ -167,8 +163,7 @@ namespace gem5
         const std::vector<int32_t> &results = core->getOutput();
 
         // 2. Copy results into the DMA buffer
-        // Note: We need to serialize the int32 results into the uint8 buffer.
-        // Ensure we don't overflow the buffer.
+        // Serialize the int32 results into the uint8 buffer.
         size_t resultBytes = results.size() * sizeof(int32_t);
 
         if (resultBytes > bufferSize)
@@ -187,8 +182,6 @@ namespace gem5
         }
 
         // 3. Write back to DRAM
-        // We use 'resultBytes' as the size, not 'transferSize' (which was the input size)
-        // Make sure your C code allocated enough space at dstAddr!
         dmaPort.dmaAction(MemCmd::WriteReq, dstAddr, resultBytes, &dmaWriteEvent, buffer, 0);
     }
 

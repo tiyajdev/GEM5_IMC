@@ -20,7 +20,6 @@ namespace gem5
                                                                     inputSigned(p.input_signed),
                                                                     weightSigned(p.weight_signed),
                                                                     energyPerMacFj(p.energy_per_mac_fj),
-                                                                    mask(p.mask),
                                                                     stats(this) // Initialize stats group
     {
         // Resize output buffer based on your logic
@@ -143,8 +142,6 @@ namespace gem5
                 {
                     weightBuffer[destIdx + r] = in[srcIdx + r];
                 }
-                // Note: Indices [destIdx + rowsPerCol ... destIdx + 143] remain unchanged (or old garbage).
-                // This is safe because your compute loop gates based on 'rowsInBatch'.
             }
         }
     }
@@ -159,9 +156,7 @@ namespace gem5
         // Calculate how many Logical Values (pixels/activations) the hardware expects
         size_t logicalSize = Di * M;
 
-        // 2. CHECK: Is the input PACKED?
-        // Logic: We are in 4-bit mode (Bi=4) AND the received data size is half the logical size.
-        // (e.g., We need 64 inputs, but we received 32 bytes -> It must be packed).
+        // 2. CHECK: Is the input PACKED
         bool isPacked = (Bi == 4) && (in.size() <= (logicalSize + 1) / 2);
 
         if (isPacked)
@@ -199,7 +194,6 @@ namespace gem5
     Cycles DigitalIMCCore::getLatencyCycles() const
     {
         // 1. Calculate how many serial batches are actually needed based on Active Rows
-        // (If hardware has 64 rows (Di) and we use 64 rows, batches = 1).
         int batchesNeeded = (regActiveRows + Di - 1) / Di;
 
         // 2. Compute Latency
@@ -213,11 +207,11 @@ namespace gem5
     {
         performFunctionalCompute();
 
-        // 2. Calculate how long it took
+        // 1. Calculate how long it took
         Cycles lat = getLatencyCycles();
 
-        // 3. Update the Total Latency Statistic
-        // We convert Cycles -> Ticks because gem5 stats usually track time in Ticks
+        // 2. Update the Total Latency Statistic
+        // Convert Cycles -> Ticks because gem5 stats usually track time in Ticks
         stats.totalProcessingLatency += cyclesToTicks(lat);
     }
 
@@ -245,18 +239,13 @@ namespace gem5
     void
     DigitalIMCCore::performFunctionalCompute()
     {
-        // --- THIS IS YOUR EXACT LOGIC PORTED ---
         if (inputBuffer.empty() || weightBuffer.empty())
             return;
 
         DPRINTF(IMCAcc, "Compute Start: ActiveRows=%d, ActiveCols=%d, Bank=%d\n",
                 regActiveRows, regActiveCols, currentComputeBank);
 
-        // ---------------------------------------------------------
-        // 1. HARDWARE RESET (The Fix)
-        // ---------------------------------------------------------
         // Simulates the "Clear Accumulators" signal at the start of a cycle.
-        // We fill the buffer with 0s so loop N doesn't inherit data from loop N-1.
         std::fill(outputBuffer.begin(), outputBuffer.end(), 0);
 
         long long currentRunOps = 0;
@@ -269,9 +258,7 @@ namespace gem5
         int remainingGlobalCols = regActiveCols;
         int totalActiveRows = regActiveRows;
 
-        // Calculate how many batches we need to cover these rows
-        // e.g. If Parent says "32 rows", and Di=16, we need 2 batches.
-        // 3. Calculate Batches needed
+        // 2. Calculate Batches needed
         int batchesNeeded = (totalActiveRows + Di - 1) / Di;
         if (batchesNeeded > M)
             batchesNeeded = M; // Safety Clamp
@@ -279,13 +266,7 @@ namespace gem5
         // 1. Loop Macros
         for (int m = 0; m < numMacros; ++m)
         {
-            // Macro Gating: If this macro is beyond the active columns?
-            // Actually, usually the Parent handles this by sending data only to active macros.
-            // But if you broadcast:
-            // If we are at Macro 1 (Columns 32-63) but Parent said "20 Columns total",
-            // then this whole macro is idle.
-
-            // Horizontal Gating Logic
+            // Macro Gating: If this macro is beyond the active columns
             int colsInThisMacro = remainingGlobalCols;
             if (colsInThisMacro > Do_dim)
                 colsInThisMacro = Do_dim;
@@ -301,10 +282,6 @@ namespace gem5
             for (int batch = 0; batch < batchesNeeded; ++batch)
             {
                 // Calculate Active Rows for THIS batch
-                // e.g. Total 20 rows.
-                // Batch 0: rows 0-15 (16 rows)
-                // Batch 1: rows 16-19 (4 rows)
-                // Vertical Gating Logic
                 int rowsProcessed = batch * Di;
                 int rowsRemaining = totalActiveRows - rowsProcessed;
                 int rowsInBatch = (rowsRemaining > Di) ? Di : rowsRemaining;
@@ -330,7 +307,7 @@ namespace gem5
                             // 1. Decode Input (Activations)
                             int32_t val_a = decodeValue(raw_a, Bi, inputSigned);
                             int32_t val_b = decodeValue(raw_b, Bw, weightSigned);
-                            // 3. Multiply and Accumulate
+                            // 2. Multiply and Accumulate
                             //    C++ handles the "Signed * Unsigned" automatically
                             //    because both are now safe int32_t containers.
                             outputBuffer[(m * Do_dim) + col] += val_a * val_b;
@@ -340,10 +317,9 @@ namespace gem5
                     }
                 }
                 // Energy is paid for every MAC performed in the array (active or not usually, depends on gating)
-                // Your logic: totalEnergy += (p.Di * p.Do * p.energyPerMac);
                 currentRunEnergy += (rowsInBatch * colsInThisMacro * energyPerMacFj);
                 // Energy Calculation:
-                // Only pay for the batches we actually ran.
+                // Only pay for the batches actually ran.
             }
             // Prepare for next macro
             remainingGlobalCols -= colsInThisMacro;

@@ -9,7 +9,7 @@
 // Input: 7x7x2
 #define IN_H 14
 #define IN_W 14
-#define IN_C 16
+#define IN_C 32
 
 // Filter: 3x3, 32 Filters
 #define K_H  3
@@ -26,6 +26,25 @@
 // Output Dimensions
 #define OUT_H ((IN_H - K_H + (2 * PADDING)) / STRIDE + 1)
 #define OUT_W ((IN_W - K_W + (2 * PADDING)) / STRIDE + 1)
+
+void m5_reset_stats(uint64_t delay, uint64_t period) {
+    register uint64_t a0 asm("a0") = delay;
+    register uint64_t a1 asm("a1") = period;
+    
+    // CHANGED: 0x73 -> 0x7B
+    // Opcode 0x7B is the custom "M5Op" reserved opcode for your Gem5 build
+    asm volatile (".insn r 0x7B, 0x0, 0x40, x0, %0, %1" :: "r"(a0), "r"(a1));
+}
+
+void m5_dump_stats(uint64_t delay, uint64_t period) {
+    register uint64_t a0 asm("a0") = delay;
+    register uint64_t a1 asm("a1") = period;
+    
+    // CHANGED: 0x73 -> 0x7B
+    // 0x41 is the "Dump Stats" function code
+    asm volatile (".insn r 0x7B, 0x0, 0x41, x0, %0, %1" :: "r"(a0), "r"(a1));
+}
+
 
 // ---------------------------------------------------------
 // 2. MAIN DRIVER
@@ -51,6 +70,8 @@ int main() {
     for(int i=0; i<NUM_FILTERS*K_LEN; i++) weights[i] = 1; 
     // Clear Outputs
     memset(output_map, 0, OUT_H * OUT_W * NUM_FILTERS * sizeof(int32_t));
+
+    m5_reset_stats(0, 0);
 
     // =========================================================
     // C. CPU CONVOLUTION (Standard 6-Loop Implementation)
@@ -123,5 +144,7 @@ int main() {
     }
 
     free(input_img); free(weights); free(output_map);
+
+    m5_dump_stats(0, 0);
     return 0;
 }

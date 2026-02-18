@@ -18,7 +18,7 @@ namespace gem5
     class DigitalIMCCore : public ClockedObject
     {
     private:
-        // --- 1. Profile Data (from your IMCProfile) --
+        // 1. Configuration Parameters
         const int Di;             // number of inputs to the IMC
         const int Do_dim;         // number of outputs to the IMC
         const int M;              // multiplexing factor, so the number of weights that share the same
@@ -29,12 +29,10 @@ namespace gem5
         const int Bi;            // input bit precision
         const int Bw;            // weight bit precision
         const int Bcycles;       // number of input bits processed per cycle
-        const bool inputSigned;  // if input signed
+        const bool inputSigned;  // is input signed
         const bool weightSigned; // is weights signed
 
         const double energyPerMacFj; // energy per MAC operation
-
-        const uint32_t mask;
 
         // Internal registers to store these values
         int regActiveCols;      // number of columns filled in the IMC(number of outputs/filters)
@@ -50,11 +48,6 @@ namespace gem5
         // This is the function containing your validated loops
         void performFunctionalCompute();
 
-        // The idea of this helper is that this model will represent IMC models that support
-        // 8-bit and 4-bit precision, because the smallest unit that we can access is 8 bits
-        // we need this decoder so that when we received the packed data from memory we will
-        // depack each 8 bits into two 4 bits and store them in the 8 bit variables used here
-        // before starting the computation.
         // General decoder that handles any bit width (4, 8, etc.)
         int32_t decodeValue(uint8_t val, int bits, bool isSigned);
 
@@ -72,10 +65,8 @@ namespace gem5
     public:
         DigitalIMCCore(const DigitalIMCCoreParams &p);
         virtual ~DigitalIMCCore() = default;
-        // --- The Parent Interface ---
-        // In DigitalIMCCore.hh under public:
 
-        // In digital_imc_core.hh
+        // --- The Parent Interface ---
         int getBw() const { return Bw; }
         int getBi() const { return Bi; }
         int getDi() const { return Di; }
@@ -113,23 +104,6 @@ namespace gem5
          * Called by the Wrapper to write data back to the Scratchpad.
          */
         const std::vector<int32_t> &getOutput() const;
-
-        size_t getInputDriverSize() const
-        {
-            return (size_t)Di * M; // Returns bytes (assuming 8-bit input storage)
-        }
-
-        // Helper for the Wrapper to know how much to write back
-        size_t getAccumulatorSize() const
-        {
-            // Output buffer is int32_t, so we multiply by 4
-            return (size_t)Do_dim * numMacros * sizeof(int32_t);
-        }
-
-        void addLatency(Tick ticks)
-        {
-            stats.totalProcessingLatency += ticks;
-        }
 
         // Updated Buffer Clear method
         void clearInputBuffer()

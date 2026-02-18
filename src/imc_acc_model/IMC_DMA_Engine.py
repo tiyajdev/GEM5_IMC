@@ -5,7 +5,7 @@ from m5.objects.Device import DmaDevice
 class IMC_DMA_Engine(DmaDevice):
     type = 'IMC_DMA_Engine'
     cxx_header = "imc_acc_model/IMC_DMA_Engine.hh"
-    cxx_class = 'gem5::IMC_DMA_Engine' # <--- Note the gem5:: prefix here!
+    cxx_class = 'gem5::IMC_DMA_Engine'
 
     core = Param.DigitalIMCCore("The internal IMC Core model")
 

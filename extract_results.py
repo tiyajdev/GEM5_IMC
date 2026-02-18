@@ -10,29 +10,29 @@ def parse_gem5_stats(stat_file):
     data = {}
     
     # ------------------------------------------------------------------------
-    # DEFINITIONS: The specific stats we care about
+    # DEFINITIONS: The specific stats we care about (Updated for SRAM/TinyML)
     # ------------------------------------------------------------------------
     target_stats = [
         # --- Time & CPU ---
-        "simSeconds",                               # Total Runtime
-        "system.cpu.commitStats0.numInsts",         # CPU Instructions
+        "simSeconds",                                     # Total Runtime
+        "simInsts",                                       # Total Instructions (Better than commitStats)
         
         # --- Accelerator (Compute) ---
         "system.imc.core.total_ops",                # Accelerator Workload
         "system.imc.core.total_energy_fj",          # Accelerator Energy
         "system.imc.core.total_processing_latency", # Accelerator Active Time
         
-        # --- Memory (High Level) ---
-        "system.mem_ctrl.dram.bwTotal::total",      # Avg Bandwidth
-        "system.mem_ctrl.dram.bytesRead::total",    # Grand Total Read
-        "system.mem_ctrl.dram.bytesWritten::total", # Grand Total Written
+        # --- Memory (SRAM / SimpleMemory) ---
+        # Note: SimpleMemory uses different stat names than DRAMCtrl
+        "system.sram.bytesRead::total",             # Grand Total Read
+        "system.sram.bytesWritten::total",          # Grand Total Written
         
-        # --- Memory (Detailed Breakdown) ---
-        "system.mem_ctrl.dram.bytesInstRead::total", # CPU Instruction Fetch
-        "system.mem_ctrl.dram.bytesRead::cpu.data",  # CPU Data Read (Stack/Heap)
-        "system.mem_ctrl.dram.bytesWritten::cpu.data", # CPU Data Write
-        "system.mem_ctrl.dram.bytesRead::imc",       # Accelerator DMA Read
-        "system.mem_ctrl.dram.bytesWritten::imc"     # Accelerator DMA Write
+        # --- Memory Breakdown ---
+        "system.sram.bytesRead::cpu.inst",          # CPU Instruction Fetch
+        "system.sram.bytesRead::cpu.data",          # CPU Data Read
+        "system.sram.bytesWritten::cpu.data",       # CPU Data Write
+        "system.sram.bytesRead::imc",               # Accelerator DMA Read
+        "system.sram.bytesWritten::imc",            # Accelerator DMA Write
     ]
 
     print(f"--- Parsing: {stat_file} ---")
@@ -40,14 +40,13 @@ def parse_gem5_stats(stat_file):
     # Read the file line by line
     with open(stat_file, 'r') as f:
         for line in f:
-            # Skip empty lines or comments
-            if not line.strip() or line.startswith("---"):
+            parts = line.split()
+            if not parts:
                 continue
             
-            parts = line.split()
             stat_name = parts[0]
             
-            # Helper to check if line starts with target (handles minor version diffs)
+            # 1. Exact Match Check
             if stat_name in target_stats:
                 try:
                     data[stat_name] = float(parts[1])
@@ -68,14 +67,17 @@ def parse_gem5_stats(stat_file):
 
     # --- 1. System Performance ---
     sim_sec = get_val("simSeconds")
+    sim_insts = get_val("simInsts")
     print(f"{'Total Execution Time':<35} | {sim_sec:.6f} s")
-    print(f"{'CPU Instructions Executed':<35} | {int(get_val('system.cpu.commitStats0.numInsts'))}")
+    print(f"{'CPU Instructions Executed':<35} | {int(sim_insts)}")
     
     print("-" * 60)
 
     # --- 2. Accelerator Performance ---
     imc_ops = get_val("system.imc.core.total_ops")
-    imc_lat_ns = get_val("system.imc.core.total_processing_latency") / 1000.0
+    # Latency is usually in Ticks (ps), convert to ns
+    imc_lat_ns = get_val("system.imc.core.total_processing_latency") / 1000.0 
+    # Energy is in fJ, convert to pJ
     imc_energy_pj = get_val("system.imc.core.total_energy_fj") / 1000.0
     
     print(f"{'IMC Total MAC Ops':<35} | {int(imc_ops)}")
@@ -84,14 +86,16 @@ def parse_gem5_stats(stat_file):
 
     print("-" * 60)
     
-    # --- 3. Memory Traffic Detailed Breakdown ---
+    # --- 3. Memory Traffic Detailed Breakdown (SRAM) ---
     # Retrieve raw values
-    cpu_inst  = get_val("system.mem_ctrl.dram.bytesInstRead::total")
-    cpu_d_rd  = get_val("system.mem_ctrl.dram.bytesRead::cpu.data")
-    cpu_d_wr  = get_val("system.mem_ctrl.dram.bytesWritten::cpu.data")
-    imc_rd    = get_val("system.mem_ctrl.dram.bytesRead::imc")
-    imc_wr    = get_val("system.mem_ctrl.dram.bytesWritten::imc")
+    cpu_inst  = get_val("system.sram.bytesRead::cpu.inst")
+    cpu_d_rd  = get_val("system.sram.bytesRead::cpu.data")
+    cpu_d_wr  = get_val("system.sram.bytesWritten::cpu.data")
     
+    imc_rd    = get_val("system.sram.bytesRead::imc")
+    imc_wr    = get_val("system.sram.bytesWritten::imc")
+    
+    # Calculate Total Data Traffic (Read + Write)
     total_bytes = cpu_inst + cpu_d_rd + cpu_d_wr + imc_rd + imc_wr
     
     # Calculate Percentages
