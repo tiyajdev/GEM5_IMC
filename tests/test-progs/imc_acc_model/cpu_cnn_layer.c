@@ -7,18 +7,37 @@
 // 1. LAYER CONFIGURATION (Must match IMC exactly)
 // ---------------------------------------------------------
 // Input: 7x7x2
-#define IN_H 14
-#define IN_W 14
-#define IN_C 32
+#ifndef IN_H
+#define IN_H 32
+#endif
 
-// Filter: 3x3, 32 Filters
-#define K_H  3
-#define K_W  3
-#define NUM_FILTERS 64
+#ifndef IN_W
+#define IN_W 32
+#endif
 
-// Hyperparameters
-#define STRIDE  1
+#ifndef IN_C
+#define IN_C 16
+#endif
+
+#ifndef K_H
+#define K_H 3
+#endif
+
+#ifndef K_W
+#define K_W 3
+#endif
+
+#ifndef NUM_FILTERS
+#define NUM_FILTERS 32
+#endif
+
+#ifndef STRIDE
+#define STRIDE 2
+#endif
+
+#ifndef PADDING
 #define PADDING 1
+#endif
 
 // Flattened Kernel Length (for Weight Indexing)
 #define K_LEN (K_H * K_W * IN_C)
@@ -50,8 +69,8 @@ void m5_dump_stats(uint64_t delay, uint64_t period) {
 // 2. MAIN DRIVER
 // ---------------------------------------------------------
 int main() {
-    printf("--- CPU Baseline CNN Layer (S=%d, P=%d) ---\n", STRIDE, PADDING);
-    printf("Shape: In[%dx%dx%d] -> Out[%dx%dx%d]\n", IN_H, IN_W, IN_C, OUT_H, OUT_W, NUM_FILTERS);
+    // printf("--- CPU Baseline CNN Layer (S=%d, P=%d) ---\n", STRIDE, PADDING);
+    // printf("Shape: In[%dx%dx%d] -> Out[%dx%dx%d]\n", IN_H, IN_W, IN_C, OUT_H, OUT_W, NUM_FILTERS);
 
     // A. Memory Allocation
     uint8_t *input_img = (uint8_t*)malloc(IN_H * IN_W * IN_C);
@@ -59,15 +78,15 @@ int main() {
     int32_t *output_map = (int32_t*)malloc(OUT_H * OUT_W * NUM_FILTERS * sizeof(int32_t));
     
     if (!input_img || !weights || !output_map) {
-        printf("Malloc failed!\n");
+        // printf("Malloc failed!\n");
         return -1;
     }
 
     // B. Initialize Data (Exact Match to IMC)
     // Fill Input: Pattern 1, 2, 3...
-    for(int i=0; i<IN_H*IN_W*IN_C; i++) input_img[i] = (i % 5) + 1;
+    for(int i=0; i<IN_H*IN_W*IN_C; i++) input_img[i] = 3;
     // Fill Weights: All 1s
-    for(int i=0; i<NUM_FILTERS*K_LEN; i++) weights[i] = 1; 
+    for(int i=0; i<NUM_FILTERS*K_LEN; i++) weights[i] = 2; 
     // Clear Outputs
     memset(output_map, 0, OUT_H * OUT_W * NUM_FILTERS * sizeof(int32_t));
 
@@ -137,11 +156,11 @@ int main() {
         } // End Width Loop
     } // End Height Loop
 
-    printf("--- CPU Layer Complete ---\n");
-    printf("Pixel (0,0) Outputs:\n");
-    for(int f=0; f<NUM_FILTERS; f++) {
-        printf(" Filter %d: %d\n", f, output_map[f]);
-    }
+    // printf("--- CPU Layer Complete ---\n");
+    // printf("Pixel (0,0) Outputs:\n");
+    // for(int f=0; f<NUM_FILTERS; f++) {
+    //     printf(" Filter %d: %d\n", f, output_map[f]);
+    // }
 
     free(input_img); free(weights); free(output_map);
 

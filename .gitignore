@@ -42,3 +42,4 @@ src/bootcamp/
 workloads/*/bin/
 # Ignore generated MNIST headers
 workloads/mnist/*.h
+C[*x*]*

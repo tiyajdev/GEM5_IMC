@@ -25,6 +25,7 @@ namespace gem5
         uint32_t transferSize;
         int bankID;
         int activeCols;
+        int activeRows;
 
         bool busy;
         int lastCommand;

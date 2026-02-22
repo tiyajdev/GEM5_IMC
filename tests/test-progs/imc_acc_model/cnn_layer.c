@@ -9,8 +9,8 @@
 #define IMC_BASE    0x30000000
 #define DMA_BASE    0x10000000  // Direct Physical Memory Base
 
-#define HW_MAX_ROWS 144  // Input Length (Di * M)
-#define HW_MAX_COLS 16   // Number of Filters (Do * NumMacros)
+#define HW_MAX_ROWS 32  // Input Length (Di * M)
+#define HW_MAX_COLS 6   // Number of Filters (Do * NumMacros)
 
 // Register Offsets
 #define REG_SRC         0x00
@@ -33,12 +33,12 @@ uint64_t reg_read(int offset) {
 // ---------------------------------------------------------
 // 2. LAYER CONFIGURATION
 // ---------------------------------------------------------
-#define IN_H 14
-#define IN_W 14
-#define IN_C 32
+#define IN_H 32
+#define IN_W 32
+#define IN_C 3
 #define K_H  3
 #define K_W  3
-#define NUM_FILTERS 64
+#define NUM_FILTERS 16
 #define STRIDE  1
 #define PADDING 1
 

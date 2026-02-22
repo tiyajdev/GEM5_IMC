@@ -9,8 +9,8 @@
 #define IMC_BASE    0x30000000
 #define DMA_BASE    0x10000000  // Direct Physical Memory Base
 
-#define HW_MAX_ROWS 144  // Input Length (Di * M)
-#define HW_MAX_COLS 16   // Number of Filters (Do * NumMacros)
+#define HW_MAX_ROWS 32  // Input Length (Di * M)
+#define HW_MAX_COLS 24   // Number of Filters (Do * NumMacros)
 
 // Register Offsets
 #define REG_SRC         0x00
@@ -21,6 +21,7 @@
 #define REG_STATUS      0x28
 #define REG_BANK        0x30
 #define REG_ACTIVE_COLS 0x38
+#define REG_ACTIVE_ROWS 0x40
 
 // Register Helpers
 void reg_write(int offset, uint64_t val) {
@@ -59,14 +60,37 @@ void m5_dump_stats(uint64_t delay, uint64_t period) {
 // ---------------------------------------------------------
 // 2. LAYER CONFIGURATION
 // ---------------------------------------------------------
-#define IN_H 14
-#define IN_W 14
-#define IN_C 32
-#define K_H  3
-#define K_W  3
-#define NUM_FILTERS 64
-#define STRIDE  1
+#ifndef IN_H
+#define IN_H 32
+#endif
+
+#ifndef IN_W
+#define IN_W 32
+#endif
+
+#ifndef IN_C
+#define IN_C 16
+#endif
+
+#ifndef K_H
+#define K_H 3
+#endif
+
+#ifndef K_W
+#define K_W 3
+#endif
+
+#ifndef NUM_FILTERS
+#define NUM_FILTERS 32
+#endif
+
+#ifndef STRIDE
+#define STRIDE 2
+#endif
+
+#ifndef PADDING
 #define PADDING 1
+#endif
 
 #define K_LEN (K_H * K_W * IN_C) 
 #define OUT_H ((IN_H - K_H + (2 * PADDING)) / STRIDE + 1)
@@ -143,45 +167,44 @@ void offline_weight_packing(volatile uint8_t *ordered_wgt, volatile uint8_t *log
 // 4. MAIN DRIVER
 // ---------------------------------------------------------
 int main() {
-    printf("--- Running CNN Layer (S=%d, P=%d) via Direct DMA ---\n", STRIDE, PADDING);
-    printf("Shape: In[%dx%dx%d] -> Out[%dx%dx%d]\n", IN_H, IN_W, IN_C, OUT_H, OUT_W, NUM_FILTERS);
+    //printf("--- Running CNN Layer (S=%d, P=%d) via Direct DMA ---\n", STRIDE, PADDING);
+    //printf("Shape: In[%dx%dx%d] -> Out[%dx%dx%d]\n", IN_H, IN_W, IN_C, OUT_H, OUT_W, NUM_FILTERS);
 
+// =========================================================
+    // A. MEMORY MAPPING (Tight TinyML Footprint - 64KB Spacing)
     // =========================================================
-    // A. MEMORY MAPPING (No Malloc!)
-    // =========================================================
-    // We partition the 0x10000000 region manually to ensure no overlaps.
     
-    // 1. Input Image (Size ~100 bytes) -> Offset 0
+    // 1. Input Image (Max need: ~16KB) -> Offset 0
     volatile uint8_t *input_img = (uint8_t*)(uintptr_t)(DMA_BASE);
     
-    // We now have TWO weight pointers:
-    // A. The original "Logical" weights (e.g., from a flat file)
-    volatile uint8_t *raw_weights = (uint8_t*)(uintptr_t)(DMA_BASE + 0x8000);
-    // B. The "Packed" weights (Optimized layout for hardware)
-    volatile uint8_t *packed_weights = (uint8_t*)(uintptr_t)(DMA_BASE + 0x9000);
+    // 2A. Raw Weights (Max need: ~36KB) -> Offset 0x10000 (64KB)
+    volatile uint8_t *raw_weights = (uint8_t*)(uintptr_t)(DMA_BASE + 0x10000);
     
-    // 3. Output Map (Size ~2KB) -> Offset 0x2000 (8KB)
-    volatile int32_t *output_map = (int32_t*)(uintptr_t)(DMA_BASE + 0x10000);
+    // 2B. Packed Weights (Max need: ~36KB) -> Offset 0x20000 (128KB)
+    volatile uint8_t *packed_weights = (uint8_t*)(uintptr_t)(DMA_BASE + 0x20000);
+    
+    // 3. Output Map (Max need: 64KB) -> Offset 0x30000 (192KB)
+    volatile int32_t *output_map = (int32_t*)(uintptr_t)(DMA_BASE + 0x30000);
 
-    // 4. Hardware Buffers (Temporary Scratchpad) -> Offset 0x3000 (12KB)
-    volatile uint8_t *hw_input_buf  = (uint8_t*)(uintptr_t)(DMA_BASE + 0x30000);
-    volatile uint8_t *hw_weight_buf = (uint8_t*)(uintptr_t)(DMA_BASE + 0x30100);
-    volatile int32_t *hw_output_buf = (int32_t*)(uintptr_t)(DMA_BASE + 0x31000);
+    // 4. Hardware Buffers (Tiny Scratchpads) -> Offset 0x40000 (256KB)
+    volatile uint8_t *hw_input_buf  = (uint8_t*)(uintptr_t)(DMA_BASE + 0x40000);
+    volatile uint8_t *hw_weight_buf = (uint8_t*)(uintptr_t)(DMA_BASE + 0x40100); // Safe +256 byte step
+    volatile int32_t *hw_output_buf = (int32_t*)(uintptr_t)(DMA_BASE + 0x41000); // Safe +3.8KB step
 
     // =========================================================
     // B. INITIALIZE DATA
     // =========================================================
     // Fill Input: 1, 2, 3...
-    for(int i=0; i<IN_H*IN_W*IN_C; i++) input_img[i] = (i % 5) + 1;
+    for(int i=0; i<IN_H*IN_W*IN_C; i++) input_img[i] =  3;
     
     // Fill Weights: All 1s
-    for(int i=0; i<NUM_FILTERS*K_LEN; i++) raw_weights[i] = 1; 
+    for(int i=0; i<NUM_FILTERS*K_LEN; i++) raw_weights[i] = 2; 
     offline_weight_packing(packed_weights, raw_weights);
     
     // Clear Outputs
     for(int i=0; i<OUT_H*OUT_W*NUM_FILTERS; i++) output_map[i] = 0;
 
-    //m5_reset_stats(0, 0);
+    m5_reset_stats(0, 0);
 
     // =========================================================
     // C. CNN TILING LOOP
@@ -236,6 +259,7 @@ int main() {
                 reg_write(REG_DST, (uint64_t)(uintptr_t)hw_output_buf);
                 reg_write(REG_SIZE, active_len); 
                 reg_write(REG_ACTIVE_COLS, active_filters);
+                reg_write(REG_ACTIVE_ROWS, active_len);
                 
                 reg_write(REG_CMD, 2); 
                 while(reg_read(REG_STATUS) == 1); 
@@ -255,23 +279,23 @@ int main() {
     // =========================================================
     // D. VERIFICATION
     // =========================================================
-    printf("--- Layer Complete ---\n");
-    printf("Pixel (0,0) Outputs (Expected ~21):\n");
+    // printf("--- Layer Complete ---\n");
+    // printf("Pixel (0,0) Outputs (Expected ~21):\n");
     
-    int correct_count = 0;
-    for(int f=0; f<NUM_FILTERS; f++) {
-        int val = output_map[f];
-        printf(" Filter %d: %d\n", f, val);
-        if (val > 0) correct_count++;
-    }
+    // int correct_count = 0;
+    // for(int f=0; f<NUM_FILTERS; f++) {
+    //     int val = output_map[f];
+    //     printf(" Filter %d: %d\n", f, val);
+    //     if (val > 0) correct_count++;
+    // }
     
-    if (correct_count == NUM_FILTERS) {
-        printf("--- SUCCESS: Non-zero output detected! ---\n");
-    } else {
-        printf("--- WARNING: Some outputs are zero. Check Debug Logs. ---\n");
-    }
+    // if (correct_count == NUM_FILTERS) {
+    //     printf("--- SUCCESS: Non-zero output detected! ---\n");
+    // } else {
+    //     printf("--- WARNING: Some outputs are zero. Check Debug Logs. ---\n");
+    // }
 
-    //m5_dump_stats(0, 0);
+    m5_dump_stats(0, 0);
 
     return 0;
 }

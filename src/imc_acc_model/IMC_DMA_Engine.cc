@@ -99,6 +99,9 @@ namespace gem5
         case 0x38:
             activeCols = (int)data;
             break;
+        case 0x40:
+            activeRows = (int)data;
+            break;
         case 0x20: // COMMAND REGISTER
             if (!busy)
             {
@@ -147,7 +150,7 @@ namespace gem5
             core->setInputs(dataVec);
 
             // Set active dimensions for gating
-            core->setActiveDimensions(activeCols, (int)transferSize);
+            core->setActiveDimensions(activeCols, activeRows);
 
             core->execute();
 

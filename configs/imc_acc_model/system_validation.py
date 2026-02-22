@@ -19,7 +19,7 @@ system.cpu = RiscvTimingSimpleCPU()
 # -------------------------------------------------------------------------
 # 3. CREATE SYSTEM BUS (Crossbar)
 # -------------------------------------------------------------------------
-system.membus = SystemXBar()
+system.membus = SystemXBar(width = 8)
 
 # Connect CPU Cache Ports (Direct to bus for baremetal simplicity)
 system.cpu.icache_port = system.membus.cpu_side_ports
@@ -30,23 +30,23 @@ system.cpu.dcache_port = system.membus.cpu_side_ports
 # -------------------------------------------------------------------------
 # NEW (Safe - Above 512MB) no conflict with DRAM
 system.imc = IMC_DMA_Engine()
-system.imc_clk_domain = SrcClockDomain(clock='0.36GHz', voltage_domain=VoltageDomain())
+system.imc_clk_domain = SrcClockDomain(clock='0.22GHz', voltage_domain=VoltageDomain())
 
 system.imc.clk_domain = system.imc_clk_domain
 system.imc.pio_addr = 0x30000000
-system.imc.pio_latency = '10ns'
+system.imc.pio_latency = '4ns'
 
 # 4a. Connect the Internal Math Core
 system.imc.core = DigitalIMCCore()
-system.imc.core.di = 144        # Rows (Input Features)
-system.imc.core.do_dim = 16     # Columns (Output Filters)
+system.imc.core.di = 32        # Rows (Input Features)
+system.imc.core.do_dim = 6    # Columns (Output Filters)
 system.imc.core.m_batches = 1
-system.imc.core.num_macros = 1
-system.imc.core.num_weight_banks = 2 # Enable Double Buffering
+system.imc.core.num_macros = 4
+system.imc.core.num_weight_banks = 1 # Enable Double Buffering
 system.imc.core.bi = 8          # Input Bits
 system.imc.core.bw = 8          # Weight Bits
-system.imc.core.bcycles = 1     # Cycles per Bit
-system.imc.core.energy_per_mac_fj = 22.88
+system.imc.core.bcycles = 2     # Cycles per Bit
+system.imc.core.energy_per_mac_fj = 64.94
 
 # 4b. Connect Ports to System Bus
 # PIO: CPU writes commands here
@@ -64,10 +64,9 @@ system.cpu.createInterruptController()
 # system.mem_ctrl.dram.range = system.mem_ranges[0]
 # system.mem_ctrl.port = system.membus.mem_side_ports
 
-
 system.sram = SimpleMemory(
     range=system.mem_ranges[0], 
-    latency='1ns'
+    latency='4ns'
 )
 
 # Connect directly to the memory bus
