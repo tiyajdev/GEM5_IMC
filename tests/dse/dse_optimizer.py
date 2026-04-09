@@ -3,22 +3,39 @@ import subprocess
 import re
 import os
 
-def run_gem5_simulation(inputs, outputs, m_factor, cpu_freq, dma_burst):
-    """
-    This function takes the parameters, builds the gem5 command, 
-    runs it, and waits for it to finish.
-    """
-    # 1. Build the command to run your specific gem5 configuration
-    # (You will need to adjust these flags to match your actual config file)
-    gem5_executable = "build/RISCV/gem5.opt"
-    config_script = "configs/imc_acc_model/system_validation.py" # Change to your actual file
+# --- 1. RESNET-20 WORKLOAD DEFINITIONS ---
+resnet_workloads = [
+    {"id": "WL-1", "in_h": 32, "in_w": 32, "in_c": 3,  "k_h": 3, "k_w": 3, "filters": 16, "stride": 1, "pad": 1},
+    {"id": "WL-2", "in_h": 32, "in_w": 32, "in_c": 16, "k_h": 3, "k_w": 3, "filters": 16, "stride": 1, "pad": 1},
+    {"id": "WL-3", "in_h": 32, "in_w": 32, "in_c": 16, "k_h": 3, "k_w": 3, "filters": 32, "stride": 2, "pad": 1},
+    {"id": "WL-4", "in_h": 16, "in_w": 16, "in_c": 32, "k_h": 3, "k_w": 3, "filters": 32, "stride": 1, "pad": 1},
+    {"id": "WL-5", "in_h": 32, "in_w": 32, "in_c": 16, "k_h": 1, "k_w": 1, "filters": 32, "stride": 2, "pad": 0},
+    {"id": "WL-6", "in_h": 16, "in_w": 16, "in_c": 32, "k_h": 3, "k_w": 3, "filters": 64, "stride": 2, "pad": 1},
+    {"id": "WL-7", "in_h": 8,  "in_w": 8,  "in_c": 64, "k_h": 3, "k_w": 3, "filters": 64, "stride": 1, "pad": 1},
+    {"id": "WL-8", "in_h": 16, "in_w": 16, "in_c": 32, "k_h": 1, "k_w": 1, "filters": 64, "stride": 2, "pad": 0}
+]
 
-    # ADD YOUR SCRIPT/BINARY PATH HERE:
+def run_layer_simulation(wl, inputs, outputs, m_factor, cpu_freq, dma_burst):
+    """
+    Compiles the C-code for a specific layer and runs gem5.
+    """
+    # A. COMPILE THE BINARY FOR THIS LAYER
     binary_path = "tests/test-progs/imc_acc_model/cnn_layer-o2"
+    compile_cmd = (
+        f"riscv64-linux-gnu-gcc -static -O3 "
+        f"-DIN_H={wl['in_h']} -DIN_W={wl['in_w']} -DIN_C={wl['in_c']} "
+        f"-DK_H={wl['k_h']} -DK_W={wl['k_w']} -DNUM_FILTERS={wl['filters']} "
+        f"-DSTRIDE={wl['stride']} -DPADDING={wl['pad']} "
+        f"tests/test-progs/imc_acc_model/cnn_layer-o2.c -o {binary_path}"
+    )
+    subprocess.run(compile_cmd, shell=True, check=True)
+
+    # B. RUN GEM5
+    gem5_executable = "build/RISCV/gem5.opt"
+    config_script = "configs/imc_acc_model/system_validation.py"
     
     cmd = [
-        gem5_executable,
-        config_script,
+        gem5_executable, config_script,
         f"--binary={binary_path}",
         f"--inputs={inputs}",
         f"--outputs={outputs}",
@@ -27,114 +44,78 @@ def run_gem5_simulation(inputs, outputs, m_factor, cpu_freq, dma_burst):
         f"--dma-burst={dma_burst}"
     ]
     
-    print(f"Running: {' '.join(cmd)}")
-    
-    # 2. Execute gem5 and wait for it to finish
+    # We suppress output to keep the console clean during 8-layer loops
     subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    # C. CALL YOUR ORIGINAL EXTRACTION SCRIPT (Just like your old file)
+    # This will print your detailed table to the terminal for every layer
+    extract_cmd = "python3 extract_results.py"
+    subprocess.run(extract_cmd, shell=True, check=True)
     
+    return parse_gem5_stats()
+ 
 def parse_gem5_stats(stats_path="m5out/stats.txt"):
-    """
-    Parses the gem5 output using your custom metrics to return
-    Total System Latency and Total System Energy for Optuna.
-    """
-    # Use infinity as the default fallback. If gem5 crashes, 
-    # Optuna will see "infinite cost" and know that configuration failed.
+    """ Same as your previous script """
     latency = float('inf') 
     energy = float('inf')  
-    
     data = {}
-    target_stats = [
-        "simSeconds", 
-        "system.imc.core.total_energy_fj",
-        "system.sram.bytesRead::total",
-        "system.sram.bytesWritten::total"
-    ]
+    target_stats = ["simSeconds", "system.imc.core.total_energy_fj", 
+                    "system.sram.bytesRead::total", "system.sram.bytesWritten::total"]
     
     try:
         with open(stats_path, 'r') as f:
             for line in f:
                 parts = line.split()
                 if not parts: continue
-                
                 stat_name = parts[0]
                 if stat_name in target_stats:
-                    try:
-                        data[stat_name] = float(parts[1])
-                    except ValueError:
-                        continue
-                        
-        # --- 1. EXTRACT TOTAL SYSTEM LATENCY ---
-        # We use simSeconds because we want to measure the whole SoC bottleneck
+                    data[stat_name] = float(parts[1])
+        
         latency = data.get("simSeconds", float('inf'))
-        
-        # --- 2. EXTRACT TOTAL SYSTEM ENERGY ---
-        # Get the accelerator math energy (convert fJ to pJ)
         imc_energy_pj = data.get("system.imc.core.total_energy_fj", 0) / 1000.0
+        total_bytes = data.get("system.sram.bytesRead::total", 0) + data.get("system.sram.bytesWritten::total", 0)
         
-        # Calculate memory traffic energy overhead
-        total_read = data.get("system.sram.bytesRead::total", 0)
-        total_write = data.get("system.sram.bytesWritten::total", 0)
-        total_bytes = total_read + total_write
-        
-        # NOTE: Assign a penalty for memory traffic! 
-        # (e.g., 5 picoJoules per byte transferred across the bus)
         sram_energy_per_byte_pj = 5.0 
-        memory_energy_pj = total_bytes * sram_energy_per_byte_pj
-        
-        # Total SoC energy = Math Energy + Data Movement Energy
-        energy = imc_energy_pj + memory_energy_pj
+        energy = imc_energy_pj + (total_bytes * sram_energy_per_byte_pj)
         
     except FileNotFoundError:
-        print(f"Error: {stats_path} not found. gem5 likely crashed.")
-        
+        pass # Return infinity if crashed
     return latency, energy
 
 def objective(trial):
-    """
-    This is the function Optuna runs over and over. It suggests
-    parameters, runs the sim, and calculates the Cost.
-    """
-    # 1. Define the search space (Optuna will pick smartly from these)
+    # 1. Suggest Hardware Parameters
     inputs = trial.suggest_categorical('inputs', [16, 32, 64, 128])
     outputs = trial.suggest_categorical('outputs', [6, 16, 32, 64, 128])
     m_factor = trial.suggest_categorical('m_factor', [1, 2, 4])
     cpu_freq = trial.suggest_categorical('cpu_freq', [100, 250, 500, 750])
     dma_burst = trial.suggest_categorical('dma_burst', [8, 16, 32, 64])
+
+    total_network_latency = 0
+    total_network_energy = 0
+
+    # 2. LOOP THROUGH ALL RESNET LAYERS
+    print(f"\n[Trial {trial.number}] Testing Hardware: {inputs}x{outputs}, M={m_factor}, CPU={cpu_freq}MHz")
     
-    # 2. Run the simulation with these specific parameters
-    run_gem5_simulation(inputs, outputs, m_factor, cpu_freq, dma_burst)
-    
-    # 3. Parse the results
-    latency, energy = parse_gem5_stats()
-    
-    # 4. Calculate your Cost Function (e.g., Energy-Delay Product)
-    # Note: You can add normalization here later!
-    edp = energy * latency
-    
-    return edp
+    for wl in resnet_workloads:
+        print(f"   -> Simulating {wl['id']}...")
+        lat, nrg = run_layer_simulation(wl, inputs, outputs, m_factor, cpu_freq, dma_burst)
+        
+        if lat == float('inf'): # Early exit if gem5 crashes
+            return float('inf')
+            
+        total_network_latency += lat
+        total_network_energy += nrg
+
+    # 3. Calculate Network EDP
+    return total_network_latency * total_network_energy
 
 if __name__ == "__main__":
-    print("Starting System-Level DSE...")
-    
-    # Create the Optuna study
     study = optuna.create_study(direction="minimize")
-
-    # 1. ENQUEUE YOUR DEFAULTS: 
-    # This forces Optuna's very first guess to be these exact numbers
-    study.enqueue_trial({
-        "inputs": 32,
-        "outputs": 6,
-        "m_factor": 1,
-        "cpu_freq": 500,
-        "dma_burst": 8
-    })
+    study.enqueue_trial({"inputs": 32, "outputs": 6, "m_factor": 1, "cpu_freq": 500, "dma_burst": 8})
     
-    # Run the study for a set number of trials
-    study.optimize(objective, n_trials=1) # Start with 50 to test it
+    # WARNING: This will run 8 simulations per trial!
+    study.optimize(objective, n_trials=1) 
     
-    # Print the absolute best configuration found
     print("\n=== DSE Complete ===")
-    print(f"Best EDP Score: {study.best_value}")
-    print("Best SoC Configuration:")
-    for key, value in study.best_params.items():
-        print(f"  {key}: {value}")
+    print(f"Best Network EDP: {study.best_value}")
+    print("Best Configuration:", study.best_params)
