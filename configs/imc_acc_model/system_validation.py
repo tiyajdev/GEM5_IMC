@@ -2,12 +2,27 @@ import m5
 from m5.objects import *
 from m5.util import addToPath
 import os, sys
+import argparse
+
+# -------------------------------------------------------------------------
+# 0. ARGUMENT PARSING (Connecting to Optuna)
+# -------------------------------------------------------------------------
+parser = argparse.ArgumentParser(description="Edge SoC IMC Simulator")
+parser.add_argument("--binary", type=str, default='tests/test-progs/imc_acc_model/cpu_gemm_int8', help="Path to the binary workload")
+parser.add_argument("--inputs", type=int, default=32, help="Number of rows (di)")
+parser.add_argument("--outputs", type=int, default=6, help="Number of columns (do_dim)")
+parser.add_argument("--m-factor", type=int, default=1, help="Temporal multiplexing factor")
+parser.add_argument("--cpu-clock", type=str, default='0.5GHz', help="CPU frequency (e.g., '500MHz')")
+parser.add_argument("--dma-burst", type=int, default=8, help="Bus width / DMA burst size in bytes")
+
+# This safely parses the flags passed by the DSE script
+args = parser.parse_args()
 
 # -------------------------------------------------------------------------
 # 1. SETUP SYSTEM & CLOCK
 # -------------------------------------------------------------------------
 system = System()
-system.clk_domain = SrcClockDomain(clock='0.5GHz', voltage_domain=VoltageDomain())
+system.clk_domain = SrcClockDomain(clock=args.cpu_clock, voltage_domain=VoltageDomain())
 system.mem_mode = 'timing' # Mandatory for latency measurement
 system.mem_ranges = [AddrRange('512MB')]
 
@@ -19,7 +34,7 @@ system.cpu = RiscvTimingSimpleCPU()
 # -------------------------------------------------------------------------
 # 3. CREATE SYSTEM BUS (Crossbar)
 # -------------------------------------------------------------------------
-system.membus = SystemXBar(width = 8)
+system.membus = SystemXBar(width=args.dma_burst)
 
 # Connect CPU Cache Ports (Direct to bus for baremetal simplicity)
 system.cpu.icache_port = system.membus.cpu_side_ports
@@ -38,14 +53,14 @@ system.imc.pio_latency = '4ns'
 
 # 4a. Connect the Internal Math Core
 system.imc.core = DigitalIMCCore()
-system.imc.core.di = 32        # Rows (Input Features)
-system.imc.core.do_dim = 6    # Columns (Output Filters)
-system.imc.core.m_batches = 1
+system.imc.core.di = args.inputs           # Rows (Input Features)
+system.imc.core.do_dim = args.outputs      # Columns (Output Filters)
+system.imc.core.m_batches = args.m_factor  # M factor
 system.imc.core.num_macros = 4
-system.imc.core.num_weight_banks = 1 # Enable Double Buffering
-system.imc.core.bi = 8          # Input Bits
-system.imc.core.bw = 8          # Weight Bits
-system.imc.core.bcycles = 2     # Cycles per Bit
+system.imc.core.num_weight_banks = 1       # Enable Double Buffering
+system.imc.core.bi = 8                     # Input Bits
+system.imc.core.bw = 8                     # Weight Bits
+system.imc.core.bcycles = 2                # Cycles per Bit
 system.imc.core.energy_per_mac_fj = 64.94
 
 # 4b. Connect Ports to System Bus
@@ -81,9 +96,7 @@ system.system_port = system.membus.cpu_side_ports
 # -------------------------------------------------------------------------
 # 5. WORKLOAD SELECTION
 # -------------------------------------------------------------------------
-binary = 'tests/test-progs/imc_acc_model/cpu_gemm_int8' 
-if len(sys.argv) > 1:
-    binary = sys.argv[1]
+binary = args.binary
 
 process = Process()
 process.cmd = [binary]
