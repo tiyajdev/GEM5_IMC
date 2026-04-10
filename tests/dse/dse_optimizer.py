@@ -15,6 +15,10 @@ resnet_workloads = [
     {"id": "WL-8", "in_h": 16, "in_w": 16, "in_c": 32, "k_h": 1, "k_w": 1, "filters": 64, "stride": 2, "pad": 0}
 ]
 
+# resnet_workloads = [
+#      {"id": "WL-6", "in_h": 16, "in_w": 16, "in_c": 32, "k_h": 3, "k_w": 3, "filters": 64, "stride": 2, "pad": 1}
+# ]
+
 def run_layer_simulation(wl, inputs, outputs, m_factor, cpu_freq, dma_burst):
     """
     Compiles the C-code for a specific layer and runs gem5.
@@ -87,8 +91,8 @@ def objective(trial):
     inputs = trial.suggest_categorical('inputs', [16, 32, 64, 128])
     outputs = trial.suggest_categorical('outputs', [6, 16, 32, 64, 128])
     m_factor = trial.suggest_categorical('m_factor', [1, 2, 4])
-    cpu_freq = trial.suggest_categorical('cpu_freq', [100, 250, 500, 750])
-    dma_burst = trial.suggest_categorical('dma_burst', [8, 16, 32, 64])
+    cpu_freq = trial.suggest_categorical('cpu_freq', [100, 250, 500, 750, 1000])
+    dma_burst = trial.suggest_categorical('dma_burst', [1, 8, 16, 32, 64, 128, 256])
 
     total_network_latency = 0
     total_network_energy = 0
@@ -111,7 +115,7 @@ def objective(trial):
 
 if __name__ == "__main__":
     study = optuna.create_study(direction="minimize")
-    study.enqueue_trial({"inputs": 32, "outputs": 6, "m_factor": 1, "cpu_freq": 500, "dma_burst": 8})
+    study.enqueue_trial({"inputs": 32, "outputs": 32, "m_factor": 1, "cpu_freq": 500, "dma_burst": 8})
     
     # WARNING: This will run 8 simulations per trial!
     study.optimize(objective, n_trials=1) 

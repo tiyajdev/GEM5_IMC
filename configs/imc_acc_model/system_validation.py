@@ -3,12 +3,13 @@ from m5.objects import *
 from m5.util import addToPath
 import os, sys
 import argparse
+from gem5.components.cachehierarchies.classic.caches.l1icache import L1ICache
 
 # -------------------------------------------------------------------------
 # 0. ARGUMENT PARSING (Connecting to Optuna)
 # -------------------------------------------------------------------------
 parser = argparse.ArgumentParser(description="Edge SoC IMC Simulator")
-parser.add_argument("--binary", type=str, default='tests/test-progs/imc_acc_model/cpu_gemm_int8', help="Path to the binary workload")
+parser.add_argument("--binary", type=str, default='tests/test-progs/imc_acc_model/cnn_layer-o2', help="Path to the binary workload")
 parser.add_argument("--inputs", type=int, default=32, help="Number of rows (di)")
 parser.add_argument("--outputs", type=int, default=6, help="Number of columns (do_dim)")
 parser.add_argument("--m-factor", type=int, default=1, help="Temporal multiplexing factor")
@@ -36,8 +37,19 @@ system.cpu = RiscvTimingSimpleCPU()
 # -------------------------------------------------------------------------
 system.membus = SystemXBar(width=args.dma_burst)
 
-# Connect CPU Cache Ports (Direct to bus for baremetal simplicity)
-system.cpu.icache_port = system.membus.cpu_side_ports
+# Add a simple Instruction Cache (L1i) for the CPU
+# 1. Create the Cache
+system.cpu_icache = L1ICache(size='16kB')
+
+# 2. Connect CPU Instruction Port to Cache
+system.cpu.icache_port = system.cpu_icache.cpu_side
+
+# 3. Connect Cache to the Bus
+system.cpu_icache.mem_side = system.membus.cpu_side_ports
+
+# 4. Connect CPU Data Port DIRECTLY to the Bus
+# (This ensures the CPU can still read/write shared data with the IMC)
+#system.cpu.icache_port = system.membus.cpu_side_ports
 system.cpu.dcache_port = system.membus.cpu_side_ports
 
 # -------------------------------------------------------------------------
@@ -81,7 +93,7 @@ system.cpu.createInterruptController()
 
 system.sram = SimpleMemory(
     range=system.mem_ranges[0], 
-    latency='4ns'
+    latency='1ns'
 )
 
 # Connect directly to the memory bus

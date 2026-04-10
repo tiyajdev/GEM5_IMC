@@ -10,29 +10,32 @@ def parse_gem5_stats(stat_file):
     data = {}
     
     # ------------------------------------------------------------------------
-    # DEFINITIONS: The specific stats we care about (Updated for SRAM/TinyML)
+    # DEFINITIONS: The specific stats we care about
     # ------------------------------------------------------------------------
     target_stats = [
         # --- Time & CPU ---
         "simSeconds",                                     # Total Runtime
-        "simInsts",                                       # Total Instructions (Better than commitStats)
+        "simInsts",                                       # Total Instructions
         
         # --- Accelerator (Compute) ---
-        "system.imc.core.total_ops",                # Accelerator Workload
-        "system.imc.core.total_energy_fj",          # Accelerator Energy
-        "system.imc.core.total_processing_latency", # Accelerator Active Time
+        "system.imc.core.total_ops",                
+        "system.imc.core.total_energy_fj",          
+        "system.imc.core.total_processing_latency", 
+        
+        # --- L1 Instruction Cache ---
+        "system.cpu_icache.overallHits::total",           # Cache Hits (Instructions found in cache)
+        "system.cpu_icache.overallMisses::total",         # Cache Misses (Instructions fetched from SRAM)
         
         # --- Memory (SRAM / SimpleMemory) ---
-        # Note: SimpleMemory uses different stat names than DRAMCtrl
-        "system.sram.bytesRead::total",             # Grand Total Read
-        "system.sram.bytesWritten::total",          # Grand Total Written
+        "system.sram.bytesRead::total",             
+        "system.sram.bytesWritten::total",          
         
         # --- Memory Breakdown ---
-        "system.sram.bytesRead::cpu.inst",          # CPU Instruction Fetch
-        "system.sram.bytesRead::cpu.data",          # CPU Data Read
-        "system.sram.bytesWritten::cpu.data",       # CPU Data Write
-        "system.sram.bytesRead::imc",               # Accelerator DMA Read
-        "system.sram.bytesWritten::imc",            # Accelerator DMA Write
+        "system.sram.bytesRead::cpu.inst",          
+        "system.sram.bytesRead::cpu.data",          
+        "system.sram.bytesWritten::cpu.data",       
+        "system.sram.bytesRead::imc",               
+        "system.sram.bytesWritten::imc",            
     ]
 
     print(f"--- Parsing: {stat_file} ---")
@@ -46,7 +49,7 @@ def parse_gem5_stats(stat_file):
             
             stat_name = parts[0]
             
-            # 1. Exact Match Check
+            # Exact Match Check
             if stat_name in target_stats:
                 try:
                     data[stat_name] = float(parts[1])
@@ -75,9 +78,7 @@ def parse_gem5_stats(stat_file):
 
     # --- 2. Accelerator Performance ---
     imc_ops = get_val("system.imc.core.total_ops")
-    # Latency is usually in Ticks (ps), convert to ns
     imc_lat_ns = get_val("system.imc.core.total_processing_latency") / 1000.0 
-    # Energy is in fJ, convert to pJ
     imc_energy_pj = get_val("system.imc.core.total_energy_fj") / 1000.0
     
     print(f"{'IMC Total MAC Ops':<35} | {int(imc_ops)}")
@@ -85,8 +86,25 @@ def parse_gem5_stats(stat_file):
     print(f"{'IMC Total Energy':<35} | {imc_energy_pj:.3f} pJ")
 
     print("-" * 60)
+
+    # --- 3. Cache Performance & Energy ---
+    # Retrieve Hits and Misses
+    cache_hits = get_val("system.cpu_icache.overallHits::total")
+    cache_misses = get_val("system.cpu_icache.overallMisses::total")
     
-    # --- 3. Memory Traffic Detailed Breakdown (SRAM) ---
+    # CACTI Energy Estimates for 16kB SRAM
+    E_PER_HIT_PJ = 5.0
+    E_PER_MISS_PJ = 15.0
+    
+    cache_energy_pj = (cache_hits * E_PER_HIT_PJ) + (cache_misses * E_PER_MISS_PJ)
+    
+    print(f"{'I-Cache Hits (Local)':<35} | {int(cache_hits)}")
+    print(f"{'I-Cache Misses (To Bus)':<35} | {int(cache_misses)}")
+    print(f"{'I-Cache Dynamic Energy':<35} | {cache_energy_pj:.3f} pJ")
+
+    print("-" * 60)
+    
+    # --- 4. Memory Traffic Detailed Breakdown (SRAM) ---
     # Retrieve raw values
     cpu_inst  = get_val("system.sram.bytesRead::cpu.inst")
     cpu_d_rd  = get_val("system.sram.bytesRead::cpu.data")
@@ -105,7 +123,7 @@ def parse_gem5_stats(stat_file):
 
     print(f"{'MEMORY TRAFFIC BREAKDOWN':<35} | {'BYTES':<10} | {'% TOTAL':<8}")
     print("-" * 60)
-    print(f"{' [CPU] Instruction Fetch':<35} | {int(cpu_inst):<10} | {pct_cpu_inst:.1f}%")
+    print(f"{' [CPU] Instruction Fetch (SRAM)':<35} | {int(cpu_inst):<10} | {pct_cpu_inst:.1f}%")
     print(f"{' [CPU] Data Read':<35} | {int(cpu_d_rd):<10} |")
     print(f"{' [CPU] Data Write':<35} | {int(cpu_d_wr):<10} | {pct_cpu_data:.1f}% (Combined)")
     print(f"{' [IMC] DMA Read':<35} | {int(imc_rd):<10} |")
