@@ -4,12 +4,13 @@ from m5.util import addToPath
 import os, sys
 import argparse
 from gem5.components.cachehierarchies.classic.caches.l1icache import L1ICache
+from gem5.components.cachehierarchies.classic.caches.l1dcache import L1DCache
 
 # -------------------------------------------------------------------------
 # 0. ARGUMENT PARSING (Connecting to Optuna)
 # -------------------------------------------------------------------------
 parser = argparse.ArgumentParser(description="Edge SoC IMC Simulator")
-parser.add_argument("--binary", type=str, default='tests/test-progs/imc_acc_model/cnn_layer-o2', help="Path to the binary workload")
+parser.add_argument("--binary", type=str, default='tests/test-progs/imc_acc_model/cpu_cnn_layer', help="Path to the binary workload")
 parser.add_argument("--inputs", type=int, default=32, help="Number of rows (di)")
 parser.add_argument("--outputs", type=int, default=6, help="Number of columns (do_dim)")
 parser.add_argument("--m-factor", type=int, default=1, help="Temporal multiplexing factor")
@@ -35,22 +36,36 @@ system.cpu = RiscvTimingSimpleCPU()
 # -------------------------------------------------------------------------
 # 3. CREATE SYSTEM BUS (Crossbar)
 # -------------------------------------------------------------------------
+
+# 1. Main bus for the SOC
 system.membus = SystemXBar(width=args.dma_burst)
 
-# Add a simple Instruction Cache (L1i) for the CPU
-# 1. Create the Cache
-system.cpu_icache = L1ICache(size='16kB')
+# 2. Traffic cop (ONLY for the Data path)
+system.cpu_data_bus = NoncoherentXBar(width=8)
+system.cpu_data_bus.frontend_latency = 1
+system.cpu_data_bus.forward_latency = 1
+system.cpu_data_bus.response_latency = 1
+system.cpu_data_bus.header_latency = 1
 
-# 2. Connect CPU Instruction Port to Cache
+# --- INSTRUCTION PATH: Direct Connection (Skip the Cop) ---
+system.cpu_icache = L1ICache(size="16KiB")
 system.cpu.icache_port = system.cpu_icache.cpu_side
-
-# 3. Connect Cache to the Bus
 system.cpu_icache.mem_side = system.membus.cpu_side_ports
 
-# 4. Connect CPU Data Port DIRECTLY to the Bus
-# (This ensures the CPU can still read/write shared data with the IMC)
-#system.cpu.icache_port = system.membus.cpu_side_ports
-system.cpu.dcache_port = system.membus.cpu_side_ports
+# --- DATA PATH: Use the Traffic Cop to split Cache vs IMC ---
+system.cpu_dcache = L1DCache(size="16KiB")
+
+system.cpu_dcache.addr_ranges = [AddrRange('0MB', '256MB')]
+# CPU Data Port -> Traffic Cop
+system.cpu.dcache_port = system.cpu_data_bus.cpu_side_ports
+# Traffic Cop -> Data Cache
+system.cpu_dcache.cpu_side = system.cpu_data_bus.mem_side_ports
+# Data Cache -> Main Bus
+system.cpu_dcache.mem_side = system.membus.cpu_side_ports
+
+# --- THE MAGIC BYPASS ---
+# This ensures 0x30000000 goes straight to the IMC
+system.cpu_data_bus.default = system.membus.cpu_side_ports
 
 # -------------------------------------------------------------------------
 # 4. INSTANTIATE YOUR ACCELERATOR (IMC_DMA_Engine)
@@ -134,6 +149,7 @@ system.cpu.workload[0].map(0x30000000, 0x30000000, 0x1000, False)
 # Virtual 0x10000000 -> Physical 0x10000000 (256MB mark)
 # We tell the CPU: "This address exists, and it maps 1:1 to Physical RAM."
 system.cpu.workload[0].map(0x10000000, 0x10000000, 0x100000, True)
+
 # -------------------------------------------------------------------------
 # 8. RUN SIMULATION
 # -------------------------------------------------------------------------

@@ -73,14 +73,10 @@ int main() {
     // printf("Shape: In[%dx%dx%d] -> Out[%dx%dx%d]\n", IN_H, IN_W, IN_C, OUT_H, OUT_W, NUM_FILTERS);
 
     // A. Memory Allocation
-    uint8_t *input_img = (uint8_t*)malloc(IN_H * IN_W * IN_C);
-    uint8_t *weights   = (uint8_t*)malloc(NUM_FILTERS * K_LEN);
-    int32_t *output_map = (int32_t*)malloc(OUT_H * OUT_W * NUM_FILTERS * sizeof(int32_t));
-    
-    if (!input_img || !weights || !output_map) {
-        // printf("Malloc failed!\n");
-        return -1;
-    }
+    // Use the direct physical addresses
+    uint8_t *input_img   = (uint8_t*)0x10000000;
+    uint8_t *weights     = (uint8_t*)(0x10000000 + 0x10000);   
+    int32_t *output_map  = (int32_t*)(0x10000000 + 0x20000); 
 
     // B. Initialize Data (Exact Match to IMC)
     // Fill Input: Pattern 1, 2, 3...
@@ -162,8 +158,9 @@ int main() {
     //     printf(" Filter %d: %d\n", f, output_map[f]);
     // }
 
-    free(input_img); free(weights); free(output_map);
-
+  
     m5_dump_stats(0, 0);
+
+    
     return 0;
 }
