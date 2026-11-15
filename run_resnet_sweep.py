@@ -19,11 +19,12 @@ compiler_cmd_template = (
     "-DIN_H={in_h} -DIN_W={in_w} -DIN_C={in_c} "
     "-DK_H={k_h} -DK_W={k_w} -DNUM_FILTERS={filters} "
     "-DSTRIDE={stride} -DPADDING={pad} "
-    "tests/test-progs/imc_acc_model/cnn_layer-o2.c "
-    "-o tests/test-progs/imc_acc_model/cnn_layer-o2"
+    "-DHW_MAX_ROWS=32 -DHW_MAX_COLS=24 "
+    "tests/test-progs/imc_acc_model/cpu_cnn_layer.c "
+    "-o tests/test-progs/imc_acc_model/cpu_cnn_layer"
 )
 
-gem5_cmd = "build/RISCV/gem5.opt configs/imc_acc_model/system_validation.py tests/test-progs/imc_acc_model/cnn_layer-o2"
+gem5_cmd = "build/RISCV/gem5.opt configs/imc_acc_model/system_validation.py --binary tests/test-progs/imc_acc_model/cpu_cnn_layer"
 extract_cmd = "python3 extract_results.py"
 
 print("Starting ResNet-20 Layer Sweep...")

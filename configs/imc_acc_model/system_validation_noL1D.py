@@ -36,36 +36,19 @@ system.cpu = RiscvTimingSimpleCPU()
 # -------------------------------------------------------------------------
 # 3. CREATE SYSTEM BUS (Crossbar)
 # -------------------------------------------------------------------------
-
-# 1. Main bus for the SOC
 system.membus = SystemXBar(width=args.dma_burst)
 
-# 2. Traffic cop (ONLY for the Data path)
-system.cpu_data_bus = NoncoherentXBar(width=8)
-system.cpu_data_bus.frontend_latency = 1
-system.cpu_data_bus.forward_latency = 1
-system.cpu_data_bus.response_latency = 1
-system.cpu_data_bus.header_latency = 1
-
 # --- INSTRUCTION PATH: Direct Connection (Skip the Cop) ---
-system.cpu_icache = L1ICache(size="16KiB")
+system.cpu_icache = L1ICache(
+    size="16KiB",
+    assoc=2,
+    tag_latency=1,      # 1 cycle to check tags (0.5 GHz period > 1.39ns)
+    data_latency=1,     # 1 cycle to access data
+    response_latency=1  # 1 cycle for the bus response
+     )
 system.cpu.icache_port = system.cpu_icache.cpu_side
 system.cpu_icache.mem_side = system.membus.cpu_side_ports
-
-# --- DATA PATH: Use the Traffic Cop to split Cache vs IMC ---
-system.cpu_dcache = L1DCache(size="16KiB")
-
-system.cpu_dcache.addr_ranges = [AddrRange('0MB', '256MB')]
-# CPU Data Port -> Traffic Cop
-system.cpu.dcache_port = system.cpu_data_bus.cpu_side_ports
-# Traffic Cop -> Data Cache
-system.cpu_dcache.cpu_side = system.cpu_data_bus.mem_side_ports
-# Data Cache -> Main Bus
-system.cpu_dcache.mem_side = system.membus.cpu_side_ports
-
-# --- THE MAGIC BYPASS ---
-# This ensures 0x30000000 goes straight to the IMC
-system.cpu_data_bus.default = system.membus.cpu_side_ports
+system.cpu.dcache_port = system.membus.cpu_side_ports
 
 # -------------------------------------------------------------------------
 # 4. INSTANTIATE YOUR ACCELERATOR (IMC_DMA_Engine)
@@ -108,7 +91,9 @@ system.cpu.createInterruptController()
 
 system.sram = SimpleMemory(
     range=system.mem_ranges[0], 
-    latency='1ns'
+    latency='2.15ns',
+    bandwidth='4GiB/s',        # Matches your 64-bit bus @ 0.5GHz
+    latency_var='0ns'          # SRAM is deterministic
 )
 
 # Connect directly to the memory bus
@@ -141,7 +126,13 @@ m5.instantiate()
 
 # -------------------------------------------------------------------------
 # 7. MAP PAGE TABLE (Must happen AFTER instantiate)
-# ----------------------------------------------------------------
+# -------------------------------------------------------------------------
+# 1. Map Accelerator Registers (Same as before)
+system.cpu.workload[0].map(0x30000000, 0x30000000, 0x1000, False)
+
+# 2. Map Shared Data Region (Inside DRAM)
+# Virtual 0x10000000 -> Physical 0x10000000 (256MB mark)
+# We tell the CPU: "This address exists, and it maps 1:1 to Physical RAM."
 system.cpu.workload[0].map(0x10000000, 0x10000000, 0x100000, True)
 
 # -------------------------------------------------------------------------

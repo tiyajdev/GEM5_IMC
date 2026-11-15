@@ -1,99 +1,110 @@
-# The gem5 Simulator
+# DIMC in gem5: System-Level Modeling of Digital In-Memory Computing Accelerators
 
-This is the repository for the gem5 simulator. It contains the full source code
-for the simulator and all tests and regressions.
+This repository contains the gem5 model used in:
 
-The gem5 simulator is a modular platform for computer-system architecture
-research, encompassing system-level architecture as well as processor
-microarchitecture. It is primarily used to evaluate new hardware designs,
-system software changes, and compile-time and run-time system optimizations.
+> **System-Level Modeling of Digital In-Memory Computing Accelerators in gem5 for Edge SoC**
+> Tiya Jreige, Tommaso Spagnolo, Cristina Silvano — Politecnico di Milano
+> _IEEE International System-on-Chip Conference (SOCC) 2026_
 
-The main website can be found at <http://www.gem5.org>.
+It adds a Digital In-Memory Computing (DIMC) accelerator and a DMA engine to gem5, as memory-mapped devices next to a RISC-V CPU, to evaluate DIMC at the **system level** (CPU + caches + memory + accelerator) instead of in isolation.
+Per-configuration energy and area come from a ZigZag-IMC 28 nm cost model, calibrated to a 64.935 fJ/MAC silicon anchor (Tu et al., ISSCC'22).
 
-## Testing status
+This is a fork of [gem5](https://github.com/gem5/gem5). The original gem5 README is in [`README-gem5.md`](README-gem5.md).
 
-**Note**: These regard tests run on the develop branch of gem5:
-<https://github.com/gem5/gem5/tree/develop>.
+---
 
-[![Daily Tests](https://github.com/gem5/gem5/actions/workflows/daily-tests.yaml/badge.svg?branch=develop)](https://github.com/gem5/gem5/actions/workflows/daily-tests.yaml)
-[![Weekly Tests](https://github.com/gem5/gem5/actions/workflows/weekly-tests.yaml/badge.svg?branch=develop)](https://github.com/gem5/gem5/actions/workflows/weekly-tests.yaml)
-[![Compiler Tests](https://github.com/gem5/gem5/actions/workflows/compiler-tests.yaml/badge.svg?branch=develop)](https://github.com/gem5/gem5/actions/workflows/compiler-tests.yaml)
+## What is added to gem5
 
-## Getting started
+| Path                                                                                  | Content                                                                                                                                                                  |
+| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/imc_acc_model/`                                                                  | DIMC core (`digital_imc_core.cc/.hh`) and DMA engine (`IMC_DMA_Engine.cc/.hh`) SimObjects                                                                                |
+| `configs/imc_acc_model/`                                                              | System configurations: `system_validation.py` (main), `system_validation_DSE.py` (DSE), `_noL1D`, `_no_cache` (cache ablations), `cpu_baseline.py`, `validate_stats.py`  |
+| `tests/test-progs/imc_acc_model/`                                                     | Bare-metal workloads: `cnn_layer-o2.c` (DIMC driver, im2col + tiling) and `cpu_cnn_layer.c` (CPU-only baseline). The layer shape is set at compile time with `-D` flags. |
+| `third_party/zigzag_imc_dimc_28nm/`                                                   | ZigZag-IMC DIMC cost model (BSD-3) and the precomputed per-configuration energy table `dimc_cost_sweep_results.csv`                                                      |
+| `run_gemm.py`, `run_resnet_sweep.py`, `run_resnet_sweep_DSE.py`, `extract_results.py` | Experiment drivers and stats extraction (run from the repository root)                                                                                                   |
+| `dimc/results/`                                                                       | Published DSE results (`dse_results.csv`)                                                                                                                                |
+| `dimc/archive/`                                                                       | Exploratory scripts and plots, **not needed** to reproduce the paper                                                                                                     |
 
-A good starting point is <http://www.gem5.org/about>, and for
-more information about building the simulator and getting started
-please see <http://www.gem5.org/documentation> and
-<http://www.gem5.org/documentation/learning_gem5/introduction>.
+Apart from `.gitignore`, no existing gem5 file is modified; all additions are self-contained.
 
-## Building gem5
+---
 
-To build gem5, you will need the following software: g++ or clang,
-Python (gem5 links in the Python interpreter), SCons, zlib, m4, and lastly
-protobuf if you want trace capture and playback support. Please see
-<http://www.gem5.org/documentation/general_docs/building> for more details
-concerning the minimum versions of these tools.
+## Build
 
-Once you have all dependencies resolved, execute
-`scons build/ALL/gem5.opt` to build an optimized version of the gem5 binary
-(`gem5.opt`) containing all gem5 ISAs. If you only wish to compile gem5 to
-include a single ISA, you can replace `ALL` with the name of the ISA. Valid
-options include `ARM`, `NULL`, `MIPS`, `POWER`, `RISCV`, `SPARC`, and `X86`
-The complete list of options can be found in the build_opts directory.
+Requirements: the usual gem5 dependencies, Python 3, and a RISC-V cross-compiler (`riscv64-linux-gnu-gcc`).
 
-See https://www.gem5.org/documentation/general_docs/building for more
-information on building gem5.
+```bash
+scons build/RISCV/gem5.opt -j$(nproc)
+```
 
-## The Source Tree
+---
 
-The main source tree includes these subdirectories:
+## Reproduce the paper
 
-* build_opts: pre-made default configurations for gem5
-* build_tools: tools used internally by gem5's build process.
-* configs: example simulation configuration scripts
-* ext: less-common external packages needed to build gem5
-* include: include files for use in other programs
-* site_scons: modular components of the build system
-* src: source code of the gem5 simulator. The C++ source, Python wrappers, and Python standard library are found in this directory.
-* system: source for some optional system software for simulated systems
-* tests: regression tests
-* util: useful utility programs and files
+All commands are run from the repository root.
 
-## gem5 Resources
+### Table V: GEMM batch sweep (DIMC vs CPU)
 
-To run full-system simulations, you may need compiled system firmware, kernel
-binaries and one or more disk images, depending on gem5's configuration and
-what type of workload you're trying to run. Many of these resources can be
-obtained from <https://resources.gem5.org>.
+A 1×1 convolution is a GEMM, so the GEMM is run through the same CNN-layer workloads with `IN_C=32`, `NUM_FILTERS=24` and batch = `IN_W` (1 to 256).
+Set `TARGET = "dimc"` or `TARGET = "cpu"` at the top of the script, then:
 
-More information on gem5 Resources can be found at
-<https://www.gem5.org/documentation/general_docs/gem5_resources/>.
+```bash
+python3 run_gemm.py
+```
 
-## Getting Help, Reporting bugs, and Requesting Features
+### Table VI: ResNet-20 layers (DIMC vs CPU)
 
-We provide a variety of channels for users and developers to get help, report
-bugs, requests features, or engage in community discussions. Below
-are a few of the most common we recommend using.
+**CPU column**: the 8 ResNet-20 layers on the CPU-only baseline:
 
-* **GitHub Discussions**: A GitHub Discussions page. This can be used to start
-discussions or ask questions. Available at
-<https://github.com/orgs/gem5/discussions>.
-* **GitHub Issues**: A GitHub Issues page for reporting bugs or requesting
-features. Available at <https://github.com/gem5/gem5/issues>.
-* **Jira Issue Tracker**: A Jira Issue Tracker for reporting bugs or requesting
-features. Available at <https://gem5.atlassian.net/>.
-* **Slack**: A Slack server with a variety of channels for the gem5 community
-to engage in a variety of discussions. Please visit
-<https://www.gem5.org/join-slack> to join.
-* **gem5-users@gem5.org**: A mailing list for users of gem5 to ask questions
-or start discussions. To join the mailing list please visit
-<https://www.gem5.org/mailing_lists>.
-* **gem5-dev@gem5.org**: A mailing list for developers of gem5 to ask questions
-or start discussions. To join the mailing list please visit
-<https://www.gem5.org/mailing_lists>.
+```bash
+python3 run_resnet_sweep.py
+```
 
-## Contributing to gem5
+**DIMC column**: the case-study configuration Di=32, Do=24, M=1, 1 macro, 2 bit-cycles.
+In `run_resnet_sweep_DSE.py`, comment out the full search space and uncomment the single-configuration block below it, then:
 
-We hope you enjoy using gem5. When appropriate we advise sharing your
-contributions to the project. <https://www.gem5.org/contributing> can help you
-get started. Additional information can be found in the CONTRIBUTING.md file.
+```bash
+python3 run_resnet_sweep_DSE.py
+```
+
+### Design Space Exploration (108 configurations)
+
+| Parameter               | Values      |
+| ----------------------- | ----------- |
+| Di (rows)               | 32, 64, 128 |
+| Do (columns)            | 16, 24, 32  |
+| M (weight-reuse factor) | 1, 2, 4     |
+| Parallel macros         | 1, 2        |
+| Bit-serial cycles       | 1, 2        |
+
+108 configurations × 8 ResNet-20 layers = 864 gem5 simulations. Each configuration uses its own energy/MAC from the ZigZag-IMC table.
+
+```bash
+python3 run_resnet_sweep_DSE.py
+```
+
+Results are written to `dse_results.csv` in the repository root.
+**Note:** the script deletes any existing `dse_results.csv` in the root before starting. The published results in `dimc/results/` are not affected.
+
+The published `dimc/results/dse_results.csv` comes from a later rerun of the sweep; it matches the paper's numbers up to rounding.
+
+---
+
+## Citation
+
+```bibtex
+@inproceedings{jreige2026dimc,
+  author    = {Jreige, Tiya and Spagnolo, Tommaso and Silvano, Cristina},
+  title     = {System-Level Modeling of Digital In-Memory Computing Accelerators in gem5 for Edge SoC},
+  booktitle = {Proceedings of the IEEE International System-on-Chip Conference (SOCC)},
+  year      = {2026},
+  note      = {DOI and pages to be added}
+}
+```
+
+---
+
+## License and credits
+
+- gem5 is distributed under its original license (see `LICENSE` and `COPYING`).
+- The DIMC cost model in `third_party/zigzag_imc_dimc_28nm/` is based on [ZigZag-IMC](https://github.com/KULeuven-MICAS/zigzag-imc) (BSD-3, see its `LICENSE`).

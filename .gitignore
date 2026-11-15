@@ -43,3 +43,6 @@ workloads/*/bin/
 # Ignore generated MNIST headers
 workloads/mnist/*.h
 C[*x*]*
+# DIMC test binaries (build from .c)
+tests/test-progs/imc_acc_model/cnn_layer-o2
+tests/test-progs/imc_acc_model/cpu_cnn_layer

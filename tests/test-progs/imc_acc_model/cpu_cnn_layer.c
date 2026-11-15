@@ -8,35 +8,35 @@
 // ---------------------------------------------------------
 // Input: 7x7x2
 #ifndef IN_H
-#define IN_H 32
+#define IN_H 1
 #endif
 
 #ifndef IN_W
-#define IN_W 32
+#define IN_W 256
 #endif
 
 #ifndef IN_C
-#define IN_C 16
+#define IN_C 32
 #endif
 
 #ifndef K_H
-#define K_H 3
+#define K_H 1
 #endif
 
 #ifndef K_W
-#define K_W 3
+#define K_W 1
 #endif
 
 #ifndef NUM_FILTERS
-#define NUM_FILTERS 32
+#define NUM_FILTERS 24
 #endif
 
 #ifndef STRIDE
-#define STRIDE 2
+#define STRIDE 1
 #endif
 
 #ifndef PADDING
-#define PADDING 1
+#define PADDING 0
 #endif
 
 // Flattened Kernel Length (for Weight Indexing)

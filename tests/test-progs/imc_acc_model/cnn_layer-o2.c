@@ -9,8 +9,8 @@
 #define IMC_BASE    0x30000000
 #define DMA_BASE    0x10000000  // Direct Physical Memory Base
 
-#define HW_MAX_ROWS 32  // Input Length (Di * M)
-#define HW_MAX_COLS 24   // Number of Filters (Do * NumMacros)
+// #define HW_MAX_ROWS 32  // Input Length (Di * M)
+// #define HW_MAX_COLS 24   // Number of Filters (Do * NumMacros)
 
 // Register Offsets
 #define REG_SRC         0x00
@@ -61,35 +61,43 @@ void m5_dump_stats(uint64_t delay, uint64_t period) {
 // 2. LAYER CONFIGURATION
 // ---------------------------------------------------------
 #ifndef IN_H
-#define IN_H 32
+#define IN_H 1
 #endif
 
 #ifndef IN_W
-#define IN_W 32
+#define IN_W 256
 #endif
 
 #ifndef IN_C
-#define IN_C 16
+#define IN_C 32
 #endif
 
 #ifndef K_H
-#define K_H 3
+#define K_H 1
 #endif
 
 #ifndef K_W
-#define K_W 3
+#define K_W 1
 #endif
 
 #ifndef NUM_FILTERS
-#define NUM_FILTERS 32
+#define NUM_FILTERS 24
 #endif
 
 #ifndef STRIDE
-#define STRIDE 2
+#define STRIDE 1
 #endif
 
 #ifndef PADDING
-#define PADDING 1
+#define PADDING 0
+#endif
+
+#ifndef HW_MAX_ROWS
+#define HW_MAX_ROWS 32
+#endif
+
+#ifndef HW_MAX_COLS
+#define HW_MAX_COLS 24
 #endif
 
 #define K_LEN (K_H * K_W * IN_C) 
@@ -188,8 +196,7 @@ int main() {
 
     // 4. Hardware Buffers (Tiny Scratchpads) -> Offset 0x40000 (256KB)
     volatile uint8_t *hw_input_buf  = (uint8_t*)(uintptr_t)(DMA_BASE + 0x40000);
-    volatile uint8_t *hw_weight_buf = (uint8_t*)(uintptr_t)(DMA_BASE + 0x40100); // Safe +256 byte step
-    volatile int32_t *hw_output_buf = (int32_t*)(uintptr_t)(DMA_BASE + 0x41000); // Safe +3.8KB step
+    volatile int32_t *hw_output_buf = (int32_t*)(uintptr_t)(DMA_BASE + 0x40200); // Safe +3.8KB step
 
     // =========================================================
     // B. INITIALIZE DATA
@@ -275,25 +282,6 @@ int main() {
         }
     } 
 }
-
-    // =========================================================
-    // D. VERIFICATION
-    // =========================================================
-    // printf("--- Layer Complete ---\n");
-    // printf("Pixel (0,0) Outputs (Expected ~21):\n");
-    
-    // int correct_count = 0;
-    // for(int f=0; f<NUM_FILTERS; f++) {
-    //     int val = output_map[f];
-    //     printf(" Filter %d: %d\n", f, val);
-    //     if (val > 0) correct_count++;
-    // }
-    
-    // if (correct_count == NUM_FILTERS) {
-    //     printf("--- SUCCESS: Non-zero output detected! ---\n");
-    // } else {
-    //     printf("--- WARNING: Some outputs are zero. Check Debug Logs. ---\n");
-    // }
 
     m5_dump_stats(0, 0);
 

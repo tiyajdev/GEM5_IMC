@@ -10,9 +10,9 @@ from gem5.components.cachehierarchies.classic.caches.l1dcache import L1DCache
 # 0. ARGUMENT PARSING (Connecting to Optuna)
 # -------------------------------------------------------------------------
 parser = argparse.ArgumentParser(description="Edge SoC IMC Simulator")
-parser.add_argument("--binary", type=str, default='tests/test-progs/imc_acc_model/cpu_cnn_layer', help="Path to the binary workload")
+parser.add_argument("--binary", type=str, default='tests/test-progs/imc_acc_model/cnn_layer-o2', help="Path to the binary workload")
 parser.add_argument("--inputs", type=int, default=32, help="Number of rows (di)")
-parser.add_argument("--outputs", type=int, default=6, help="Number of columns (do_dim)")
+parser.add_argument("--outputs", type=int, default=16, help="Number of columns (do_dim)")
 parser.add_argument("--m-factor", type=int, default=1, help="Temporal multiplexing factor")
 parser.add_argument("--cpu-clock", type=str, default='0.5GHz', help="CPU frequency (e.g., '500MHz')")
 parser.add_argument("--dma-burst", type=int, default=8, help="Bus width / DMA burst size in bytes")
@@ -40,6 +40,7 @@ system.cpu = RiscvTimingSimpleCPU()
 # 1. Main bus for the SOC
 system.membus = SystemXBar(width=args.dma_burst)
 
+
 # 2. Traffic cop (ONLY for the Data path)
 system.cpu_data_bus = NoncoherentXBar(width=8)
 system.cpu_data_bus.frontend_latency = 1
@@ -48,14 +49,26 @@ system.cpu_data_bus.response_latency = 1
 system.cpu_data_bus.header_latency = 1
 
 # --- INSTRUCTION PATH: Direct Connection (Skip the Cop) ---
-system.cpu_icache = L1ICache(size="16KiB")
+system.cpu_icache = L1ICache(
+    size="16KiB",
+    assoc=2,
+    tag_latency=1,      # 1 cycle to check tags (0.5 GHz period > 1.4ns)
+    data_latency=1,     # 1 cycle to access data
+    response_latency=1  # 1 cycle for the bus response
+     )
 system.cpu.icache_port = system.cpu_icache.cpu_side
 system.cpu_icache.mem_side = system.membus.cpu_side_ports
 
 # --- DATA PATH: Use the Traffic Cop to split Cache vs IMC ---
-system.cpu_dcache = L1DCache(size="16KiB")
+system.cpu_dcache = L1DCache(
+    size="16KiB",
+    assoc=2,
+    tag_latency=1,      # 1 cycle to check tags (0.5 GHz period > 1.4ns)
+    data_latency=1,     # 1 cycle to access data
+    response_latency=1  # 1 cycle for the bus response
+     )
 
-system.cpu_dcache.addr_ranges = [AddrRange('0MB', '256MB')]
+system.cpu_dcache.addr_ranges = [AddrRange('262272KiB')]
 # CPU Data Port -> Traffic Cop
 system.cpu.dcache_port = system.cpu_data_bus.cpu_side_ports
 # Traffic Cop -> Data Cache
@@ -83,11 +96,11 @@ system.imc.core = DigitalIMCCore()
 system.imc.core.di = args.inputs           # Rows (Input Features)
 system.imc.core.do_dim = args.outputs      # Columns (Output Filters)
 system.imc.core.m_batches = args.m_factor  # M factor
-system.imc.core.num_macros = 4
+system.imc.core.num_macros = 1
 system.imc.core.num_weight_banks = 1       # Enable Double Buffering
 system.imc.core.bi = 8                     # Input Bits
 system.imc.core.bw = 8                     # Weight Bits
-system.imc.core.bcycles = 2                # Cycles per Bit
+system.imc.core.bcycles = 1                # Cycles per Bit
 system.imc.core.energy_per_mac_fj = 64.94
 
 # 4b. Connect Ports to System Bus
@@ -108,7 +121,9 @@ system.cpu.createInterruptController()
 
 system.sram = SimpleMemory(
     range=system.mem_ranges[0], 
-    latency='1ns'
+    latency='2.15ns',
+    bandwidth='4GiB/s',        # Matches your 64-bit bus @ 0.5GHz
+    latency_var='0ns'          # SRAM is deterministic
 )
 
 # Connect directly to the memory bus
